@@ -1,9 +1,0 @@
-parameters:
-  level: 7
-  paths:
-    - src
-    - tests
-  tmpDir: var/phpstan
-  inferPrivatePropertyTypeFromConstructor: true
-  checkMissingCallableSignature: false
-includes: []

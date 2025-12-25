@@ -1,0 +1,10 @@
+parameters:
+    level: 6
+    paths:
+        - src/
+        - tests/
+    tmpDir: var/phpstan
+    excludePaths:
+        - tests/bootstrap.php
+    parallel:
+        maximumNumberOfProcesses: 1

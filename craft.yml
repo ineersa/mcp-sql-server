@@ -1,0 +1,27 @@
+name: browser-mcp
+sapi:
+    - cli
+    - micro
+php_version: "8.4"
+extensions:
+    - ctype
+    - filter
+    - iconv
+    - xml
+    - phar
+    - fileinfo
+    - dom
+    - curl
+    - libxml
+libs:
+    - brotli
+    - libavif
+    - libjpeg
+    - liblz4
+    - libwebp
+    - libzip
+    - nghttp2
+    - icu
+# optional:
+# ini:
+#   - memory_limit=256M

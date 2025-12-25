@@ -1,0 +1,56 @@
+monolog:
+    channels:
+        - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+    handlers:
+        deprecation:
+            type: "null"
+            channels: [deprecation]
+
+when@dev:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: info
+                handler: nested
+                buffer_size: 50
+                channels: [ "!event", "!deprecation", "!doctrine"]
+            nested:
+                type: rotating_file
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: info
+                max_files: 2
+                formatter: monolog.formatter.json_with_stacktraces
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                channels: [ "!event", "!deprecation", "!doctrine" ]
+            nested:
+                type: rotating_file
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: info
+                max_files: 1
+                formatter: monolog.formatter.json_with_stacktraces
+
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: "%env(string:LOG_LEVEL)%"
+                handler: nested
+                buffer_size: 10
+                channels: [ "!event", "!deprecation", "!doctrine"]
+            nested:
+                type: rotating_file
+                path: "%env(string:APP_LOG_DIR)%/%kernel.environment%.log"
+                level: "%env(string:LOG_LEVEL)%"
+                max_files: 1
+                formatter: monolog.formatter.json_with_stacktraces
+

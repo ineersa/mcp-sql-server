@@ -1,0 +1,2 @@
+dist/*.phar filter=lfs diff=lfs merge=lfs -text
+dist/*.bin filter=lfs diff=lfs merge=lfs -text

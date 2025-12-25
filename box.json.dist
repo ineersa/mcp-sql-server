@@ -1,0 +1,26 @@
+{
+    "output": "dist/database-mcp.phar",
+
+    "main": "bin/database-mcp",
+
+    "directories": [
+        "bin",
+        "src",
+        "config",
+        "vendor"
+    ],
+    "files": [
+        "composer.json",
+        "composer.lock",
+        ".env"
+    ],
+
+    "compactors": [
+        "KevinGH\\Box\\Compactor\\Php"
+    ],
+
+    "compression": "GZ",
+
+    "php-scoper": null
+
+}
