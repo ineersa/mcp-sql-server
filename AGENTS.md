@@ -19,7 +19,7 @@
 - PHP strict types; 4-space indent; UTF-8; PSR-4 under `App\\`.
 - Classes: StudlyCase; methods/props: camelCase; constants: UPPER_SNAKE_CASE.
 - Folders: `Command/*Command.php`, `Tools/*Tool.php`, `Service/*Service.php`.
-- Run `composer cs-fix` before pushing; no mixed tabs/spaces. Keep imports ordered.
+- Run `composer cs-fix`, `composer phpstan`, and `composer tests` before pushing; no mixed tabs/spaces. Keep imports ordered.
 - Avoid comments unless they are necessary
 
 ## Testing Guidelines

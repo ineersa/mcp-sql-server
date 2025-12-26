@@ -6,7 +6,7 @@ namespace App\Service;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
-class VersionResolver
+class ComposerMetadataExtractor
 {
     public function __construct(
         #[Autowire('%kernel.project_dir%')]
@@ -22,6 +22,26 @@ class VersionResolver
         }
 
         return $composerJson['version'];
+    }
+
+    public function getName(): string
+    {
+        $composerJson = $this->getComposerJson();
+        if (!isset($composerJson['name'])) {
+            throw new \RuntimeException('name not found in composer.json');
+        }
+
+        return $composerJson['name'];
+    }
+
+    public function getDescription(): string
+    {
+        $composerJson = $this->getComposerJson();
+        if (!isset($composerJson['description'])) {
+            throw new \RuntimeException('description not found in composer.json');
+        }
+
+        return $composerJson['description'];
     }
 
     /**

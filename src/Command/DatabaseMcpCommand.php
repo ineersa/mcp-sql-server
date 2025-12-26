@@ -1,48 +1,68 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Command;
 
+use App\Service\ComposerMetadataExtractor;
+use Mcp\Schema\Enum\ProtocolVersion;
+use Mcp\Server;
+use Mcp\Server\Transport\StdioTransport;
+use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
     name: 'database-mcp',
-    description: 'Add a short description for your command',
+    description: 'Entrypoint MCP command',
 )]
 class DatabaseMcpCommand extends Command
 {
-    public function __construct()
-    {
+    public function __construct(
+        private LoggerInterface $logger,
+        private ContainerInterface $container,
+        private ComposerMetadataExtractor $composerMetadataExtractor,
+    ) {
         parent::__construct();
     }
 
     protected function configure(): void
     {
-        $this
-            ->addArgument('arg1', InputArgument::OPTIONAL, 'Argument description')
-            ->addOption('option1', null, InputOption::VALUE_NONE, 'Option description')
-        ;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
-        $arg1 = $input->getArgument('arg1');
+        try {
+            $server = Server::builder()
+                ->setServerInfo(
+                    name: $this->composerMetadataExtractor->getName(),
+                    version: $this->composerMetadataExtractor->getVersion(),
+                    description: $this->composerMetadataExtractor->getDescription(),
+                )
+                ->setLogger($this->logger)
+                ->setContainer($this->container)
+                ->setProtocolVersion(ProtocolVersion::V2024_11_05)
+                ->addTool(...)
+                ->build();
 
-        if ($arg1) {
-            $io->note(sprintf('You passed an argument: %s', $arg1));
+            $transport = new StdioTransport(
+                logger: $this->logger,
+            );
+
+            $server->run($transport);
+        } catch (\Throwable $e) {
+            $this->logger->error($e->getMessage(), [
+                'trace' => $e->getTrace(),
+            ]);
+            $output->getErrorOutput()->writeln(json_encode([
+                'error' => $e->getMessage(),
+            ]));
+
+            return Command::FAILURE;
         }
-
-        if ($input->getOption('option1')) {
-            // ...
-        }
-
-        $io->success('You have a new command! Now make it your own! Pass --help to see your options.');
 
         return Command::SUCCESS;
     }

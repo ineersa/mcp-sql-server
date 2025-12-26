@@ -1,7 +1,7 @@
 {
-    "name": "ineersa/mcp-mysql-server",
-    "description": "MCP server implementation to work with MySQL database",
-    "version": "0.0.1",
+    "name": "ineersa/database-mcp",
+    "description": "MCP server implementation to work with SQL databases",
+    "version": "0.0.2",
     "type": "project",
     "license": "MIT",
     "authors": [
