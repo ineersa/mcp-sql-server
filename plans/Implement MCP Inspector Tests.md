@@ -1,6 +1,27 @@
-<?php
+# Implement MCP Inspector Tests
 
-declare(strict_types=1);
+## Goal
+Add MCP Inspector tests to verify server startup and tool discovery using the `npx @modelcontextprotocol/inspector`.
+
+## Prerequisites
+- Node.js and `npx` installed.
+- `symfony/process` package (needs to be installed).
+
+## Proposed Changes
+
+### 1. Install Dependencies
+We need `symfony/process` to run the inspector command.
+```bash
+composer require --dev symfony/process
+```
+
+### 2. Create Base Test Case
+**File:** `tests/Inspector/InspectorSnapshotTestCase.php`
+
+This class handles running the inspector via `npx` and asserting the output matches the snapshot.
+
+```php
+<?php
 
 namespace App\Tests\Inspector;
 
@@ -9,10 +30,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
-#[\PHPUnit\Framework\Attributes\CoversNothing]
 abstract class InspectorSnapshotTestCase extends TestCase
 {
-    private const INSPECTOR_VERSION = '0.18.0'; // Latest version as of 2026-01-09
+    private const INSPECTOR_VERSION = '0.4.1'; // Check latest version if needed
 
     /** @param array<string, mixed> $options */
     #[DataProvider('provideMethods')]
@@ -29,17 +49,11 @@ abstract class InspectorSnapshotTestCase extends TestCase
             $inspector,
             '--cli',
             ...$this->getServerConnectionArgs(),
+            '--transport',
+            $this->getTransport(),
+            '--method',
+            $method,
         ];
-
-        // Add transport if not stdio (stdio is default)
-        $transport = $this->getTransport();
-        if ('stdio' !== $transport) {
-            $args[] = '--transport';
-            $args[] = $transport;
-        }
-
-        $args[] = '--method';
-        $args[] = $method;
 
         // Options for tools/call
         if (isset($options['toolName'])) {
@@ -97,18 +111,18 @@ abstract class InspectorSnapshotTestCase extends TestCase
 
         $process = new Process(command: $args);
         $process->setTimeout(60); // Give npx some time
-
+        
         try {
             $process->mustRun();
             $output = $process->getOutput();
         } catch (\Exception $e) {
-            $this->fail(\sprintf("Inspector failed: %s\nOutput: %s\nError Output: %s", $e->getMessage(), $process->getOutput(), $process->getErrorOutput()));
+            $this->fail(sprintf("Inspector failed: %s\nOutput: %s\nError Output: %s", $e->getMessage(), $process->getOutput(), $process->getErrorOutput()));
         }
 
         $snapshotFile = $this->getSnapshotFilePath($method, $testName);
-
+        
         // Ensure directory exists
-        $dir = \dirname($snapshotFile);
+        $dir = dirname($snapshotFile);
         if (!is_dir($dir)) {
             mkdir($dir, 0777, true);
         }
@@ -126,9 +140,11 @@ abstract class InspectorSnapshotTestCase extends TestCase
         $this->assertJsonStringEqualsJsonString($expected, $normalizedOutput, $message);
     }
 
-    /**
-     * @return array<string, array{method: string, options?: array<string, mixed>, testName?: string|null}>
-     */
+    protected function normalizeTestOutput(string $output, ?string $testName = null): string
+    {
+        return $output;
+    }
+
     public static function provideMethods(): array
     {
         return [
@@ -139,11 +155,6 @@ abstract class InspectorSnapshotTestCase extends TestCase
         ];
     }
 
-    protected function normalizeTestOutput(string $output, ?string $testName = null): string
-    {
-        return $output;
-    }
-
     abstract protected function getSnapshotFilePath(string $method, ?string $testName = null): string;
 
     /** @return array<string> */
@@ -151,3 +162,51 @@ abstract class InspectorSnapshotTestCase extends TestCase
 
     abstract protected function getTransport(): string;
 }
+```
+
+### 3. Create Server Test
+**File:** `tests/Inspector/DatabaseMcpServerTest.php`
+
+```php
+<?php
+
+namespace App\Tests\Inspector;
+
+use PHPUnit\Framework\Attributes\Test;
+
+class DatabaseMcpServerTest extends InspectorSnapshotTestCase
+{
+    private string $snapshotDir;
+
+    protected function setUp(): void
+    {
+        $this->snapshotDir = dirname(__DIR__, 2) . '/tests/__snapshots__';
+    }
+
+    protected function getSnapshotFilePath(string $method, ?string $testName = null): string
+    {
+        $name = $testName ?? preg_replace('#[^a-zA-Z0-9]+#', '_', $method);
+        return $this->snapshotDir . '/' . $name . '.json';
+    }
+
+    protected function getServerConnectionArgs(): array
+    {
+        return [
+            PHP_BINARY,
+            dirname(__DIR__, 2) . '/bin/database-mcp',
+        ];
+    }
+
+    protected function getTransport(): string
+    {
+        return 'stdio';
+    }
+}
+```
+
+## Task List
+- [ ] Install `symfony/process`: `composer require --dev symfony/process`
+- [ ] Create `tests/Inspector/InspectorSnapshotTestCase.php`
+- [ ] Create `tests/Inspector/DatabaseMcpServerTest.php`
+- [ ] Create snapshot directory if not auto-created
+- [ ] Run tests: `vendor/bin/phpunit tests/Inspector`

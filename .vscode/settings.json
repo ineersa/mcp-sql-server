@@ -87,7 +87,10 @@
         "editor.formatOnSave": true
     },
     "markdown.preview.fontSize": 18,
-    
+    "workbench.editorAssociations": {
+        "*.md": "default"
+    },
+
     "[yaml]": {
         "editor.defaultFormatter": "redhat.vscode-yaml",
         "editor.formatOnSave": true

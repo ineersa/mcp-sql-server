@@ -1,12 +1,9 @@
 ---
 description: Run full verification suite (lint, analyze, test)
 ---
-1. Format code using PHP CS Fixer.
 // turbo
-2. `composer cs-fix`
-3. Perform static analysis using PHPStan.
+1. Format code using PHP CS Fixer: `composer cs-fix`
 // turbo
-4. `composer phpstan`
-5. Execute the test suite using PHPUnit.
+2. Perform static analysis using PHPStan: `composer phpstan`
 // turbo
-6. `composer tests`
+3. Execute the test suite using PHPUnit: `composer tests`
