@@ -18,6 +18,8 @@ services:
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+    Psr\Container\ContainerInterface: '@service_container'
+ 
     monolog.formatter.json_with_stacktraces:
         class: Monolog\Formatter\JsonFormatter
         arguments:

@@ -1,0 +1,33 @@
+{
+    "editor.fontSize": 16,
+    "files.autoSave": "afterDelay",
+    "php-cs-fixer.executablePath": "${workspaceFolder}/vendor/bin/php-cs-fixer",
+    "php-cs-fixer.config": ".php-cs-fixer.dist.php",
+    "php-cs-fixer.onsave": true,
+    "php-cs-fixer.allowRisky": true,
+    "php-cs-fixer.documentFormattingProvider": true,
+    "[php]": {
+        "editor.defaultFormatter": "junstyle.php-cs-fixer"
+    },
+    "phpstan.binPath": "${workspaceFolder}/vendor/bin/phpstan",
+    "phpstan.configFile": "phpstan.dist.neon",
+    "phpstan.enabled": true,
+    "phpstan.showTypeOnHover": true,
+    "phpstan.enableStatusBar": true,
+    "workbench.colorCustomizations": {
+        "gitDecoration.modifiedResourceForeground": "#75beff",
+        "gitDecoration.untrackedResourceForeground": "#f14c4c",
+        "gitDecoration.addedResourceForeground": "#81b88b",
+        "gitDecoration.ignoredResourceForeground": "#616161"
+    },
+    "files.exclude": {
+        "**/.idea": true,
+        "**/.phpunit.cache": true
+    },
+    "search.exclude": {
+        "**/var": true,
+        "**/vendor": true,
+        "**/.phpunit.cache": true
+    },
+    "search.useIgnoreFiles": true
+}

@@ -13,6 +13,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand(
@@ -21,10 +22,15 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class DatabaseMcpCommand extends Command
 {
+    public const TEST2 = 'test2';
+
+    protected const TEST = 'test';
+
     public function __construct(
         private LoggerInterface $logger,
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
+        private \App\Tools\QueryTool $queryTool,
     ) {
         parent::__construct();
     }
@@ -33,6 +39,9 @@ class DatabaseMcpCommand extends Command
     {
     }
 
+    /**
+     * @param ConsoleOutput $output
+     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
@@ -45,7 +54,7 @@ class DatabaseMcpCommand extends Command
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
                 ->setProtocolVersion(ProtocolVersion::V2024_11_05)
-                ->addTool(...)
+                ->addTool($this->queryTool)
                 ->build();
 
             $transport = new StdioTransport(
