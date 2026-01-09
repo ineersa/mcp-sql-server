@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\ComposerMetadataExtractor;
+use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Server;
 use Mcp\Server\Transport\StdioTransport;
@@ -30,7 +31,6 @@ class DatabaseMcpCommand extends Command
         private LoggerInterface $logger,
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
-        private \App\Tools\QueryTool $queryTool,
     ) {
         parent::__construct();
     }
@@ -54,7 +54,7 @@ class DatabaseMcpCommand extends Command
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
                 ->setProtocolVersion(ProtocolVersion::V2024_11_05)
-                ->addTool($this->queryTool)
+                ->addTool(QueryTool::class)
                 ->build();
 
             $transport = new StdioTransport(
