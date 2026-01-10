@@ -79,6 +79,12 @@ final class DoctrineConfigLoader
             throw new \RuntimeException('DATABASE_CONFIG_FILE environment variable is not set.');
         }
 
+        // If relative path, resolve from project root
+        if (!str_starts_with($configFile, '/')) {
+            $projectRoot = \dirname(__DIR__, 2);
+            $configFile = $projectRoot.'/'.$configFile;
+        }
+
         return $configFile;
     }
 

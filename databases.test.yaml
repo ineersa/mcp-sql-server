@@ -1,0 +1,6 @@
+doctrine:
+  dbal:
+    connections:
+      test:
+        driver: "pdo_sqlite"
+        memory: true

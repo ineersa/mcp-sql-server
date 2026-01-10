@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\ComposerMetadataExtractor;
+use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Server;
@@ -31,6 +32,7 @@ class DatabaseMcpCommand extends Command
         private LoggerInterface $logger,
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
+        private DoctrineConfigLoader $doctrineConfigLoader,
     ) {
         parent::__construct();
     }
@@ -45,11 +47,27 @@ class DatabaseMcpCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
+            // Load and validate database connections
+            $this->doctrineConfigLoader->loadAndValidate();
+
+            // Generate dynamic description with available connections
+            $connectionNames = $this->doctrineConfigLoader->getConnectionNames();
+            $connectionInfo = [];
+            foreach ($connectionNames as $name) {
+                $type = $this->doctrineConfigLoader->getConnectionType($name);
+                $connectionInfo[] = \sprintf('%s (%s)', $name, $type ?? 'unknown');
+            }
+
+            $description = $this->composerMetadataExtractor->getDescription();
+            if ([] !== $connectionInfo) {
+                $description .= \sprintf(' | Available connections: %s', implode(', ', $connectionInfo));
+            }
+
             $server = Server::builder()
                 ->setServerInfo(
                     name: $this->composerMetadataExtractor->getName(),
                     version: $this->composerMetadataExtractor->getVersion(),
-                    description: $this->composerMetadataExtractor->getDescription(),
+                    description: $description,
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)

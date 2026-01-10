@@ -1,0 +1,10 @@
+doctrine:
+    dbal:
+        connections:
+            finance:
+                driver: 'pdo_mysql'
+                host: 'localhost'
+                dbname: 'finance'
+                user: 'finance_mcp'
+                password: 'mcp_password'
+                serverVersion: '8.0'

@@ -1,0 +1,22 @@
+{
+  "tools": [
+    {
+      "name": "QueryTool",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection",
+          "query"
+        ]
+      }
+    }
+  ]
+}
