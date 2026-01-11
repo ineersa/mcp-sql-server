@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\ComposerMetadataExtractor;
+use App\Service\DatabaseInitializer;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
@@ -33,6 +34,7 @@ class DatabaseMcpCommand extends Command
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
         private DoctrineConfigLoader $doctrineConfigLoader,
+        private DatabaseInitializer $databaseInitializer,
     ) {
         parent::__construct();
     }
@@ -49,6 +51,9 @@ class DatabaseMcpCommand extends Command
         try {
             // Load and validate database connections
             $this->doctrineConfigLoader->loadAndValidate();
+
+            // Initialize in-memory databases with test fixtures (if any)
+            $this->databaseInitializer->initializeTestDatabases();
 
             // Generate dynamic description with available connections
             $connectionNames = $this->doctrineConfigLoader->getConnectionNames();

@@ -195,6 +195,14 @@ final class DoctrineConfigLoader
             $params['driver'] = $config['driver'] ?? null;
             $params['serverVersion'] = $config['version'] ?? $config['serverVersion'] ?? null;
 
+            // SQLite specific parameters
+            if (isset($config['memory'])) {
+                $params['memory'] = $config['memory'];
+            }
+            if (isset($config['path'])) {
+                $params['path'] = $config['path'];
+            }
+
             if (isset($config['applicationIntent'])) {
                 $params['applicationIntent'] = $config['applicationIntent'];
             }

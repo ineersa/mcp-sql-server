@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Tools;
 
 use App\Service\DoctrineConfigLoader;
+use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
-use Mcp\Schema\Result\TextContent;
+
 
 final class QueryTool
 {

@@ -6,6 +6,14 @@ namespace App\Tests\Inspector;
 
 final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Initialize SQLite database with fixtures for testing
+        $this->initializeTestDatabase();
+    }
+
     /**
      * @return array<string, array{method: string, options?: array<string, mixed>, testName?: string|null}>
      */
@@ -13,6 +21,19 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
     {
         return [
             'Tool Listing' => ['method' => 'tools/list'],
+            'Query Execution' => [
+                'method' => 'tools/call',
+                'options' => [
+                    'toolName' => 'QueryTool',
+                    'toolArgs' => [
+                        'connection' => 'test',
+                        'query' => 'SELECT * FROM users ORDER BY id',
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -42,5 +63,23 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
     protected function getTransport(): string
     {
         return 'stdio';
+    }
+
+    /**
+     * Initialize the test database with schema and fixtures.
+     */
+    private function initializeTestDatabase(): void
+    {
+        // Load the test database configuration
+        $_ENV['DATABASE_CONFIG_FILE'] = \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2));
+
+        // Create DoctrineConfigLoader and load connections
+        $logger = new \Psr\Log\NullLogger();
+        $loader = new \App\Service\DoctrineConfigLoader($logger);
+        $loader->loadAndValidate();
+
+        // Get the test connection and setup fixtures
+        $connection = $loader->getConnection('test');
+        \App\Tests\Fixtures\DatabaseFixtures::setup($connection);
     }
 }
