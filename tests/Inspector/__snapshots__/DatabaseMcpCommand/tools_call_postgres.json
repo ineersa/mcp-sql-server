@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "[\n    {\n        \"id\": 1,\n        \"name\": \"Grace\",\n        \"email\": \"grace@example.com\"\n    },\n    {\n        \"id\": 2,\n        \"name\": \"Heidi\",\n        \"email\": \"heidi@example.com\"\n    },\n    {\n        \"id\": 3,\n        \"name\": \"Ivan\",\n        \"email\": \"ivan@example.com\"\n    }\n]"
+    }
+  ],
+  "isError": false
+}

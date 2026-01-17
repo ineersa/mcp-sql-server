@@ -7,7 +7,7 @@ doctrine:
             mysql:
                 driver: "pdo_mysql"
                 host: "127.0.0.1"
-                port: 3306
+                port: 13306
                 dbname: "mcp_test"
                 user: "test_user"
                 password: "test_password"
@@ -16,7 +16,7 @@ doctrine:
             postgres:
                 driver: "pdo_pgsql"
                 host: "127.0.0.1"
-                port: 5432
+                port: 15432
                 dbname: "mcp_test"
                 user: "test_user"
                 password: "test_password"
@@ -25,8 +25,10 @@ doctrine:
             sqlserver:
                 driver: "pdo_sqlsrv"
                 host: "127.0.0.1"
-                port: 1433
+                port: 11433
                 dbname: "mcp_test"
                 user: "sa"
                 password: "Test@Password123"
                 serverVersion: "2019"
+                driverOptions:
+                    TrustServerCertificate: "yes"
