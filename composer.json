@@ -10,8 +10,7 @@
             "email": "ineersa@gmail.com"
         }
     ],
-    "repositories": [
-    ],
+    "repositories": [],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "require": {
@@ -19,6 +18,11 @@
         "ext-ctype": "*",
         "ext-iconv": "*",
         "ext-fileinfo": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "ext-pdo_pgsql": "*",
+        "ext-pdo_sqlsrv": "*",
+        "ext-pdo_sqlite": "*",
         "doctrine/dbal": "^4.4.1",
         "doctrine/doctrine-bundle": "^2.18.2",
         "mcp/sdk": ">=0.2",

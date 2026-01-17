@@ -10,8 +10,8 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
     {
         parent::setUp();
 
-        // Initialize SQLite database with fixtures for testing
-        $this->initializeTestDatabase();
+        // Initialize all test databases with fixtures
+        $this->initializeTestDatabases();
     }
 
     /**
@@ -19,22 +19,29 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
      */
     public static function provideMethods(): array
     {
-        return [
+        $baseTests = [
             'Tool Listing' => ['method' => 'tools/list'],
-            'Query Execution' => [
+        ];
+
+        // Add query execution tests for each database
+        foreach (['sqlite', 'mysql', 'postgres', 'sqlserver'] as $connection) {
+            $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [
                     'toolName' => 'QueryTool',
                     'toolArgs' => [
-                        'connection' => 'test',
+                        'connection' => $connection,
                         'query' => 'SELECT * FROM users ORDER BY id',
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
                     ],
                 ],
-            ],
-        ];
+                'testName' => $connection,
+            ];
+        }
+
+        return $baseTests;
     }
 
     protected function getSnapshotFilePath(string $method, ?string $testName = null): string
@@ -66,9 +73,9 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
     }
 
     /**
-     * Initialize the test database with schema and fixtures.
+     * Initialize all test databases with schema and fixtures.
      */
-    private function initializeTestDatabase(): void
+    private function initializeTestDatabases(): void
     {
         // Load the test database configuration
         $_ENV['DATABASE_CONFIG_FILE'] = \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2));
@@ -78,8 +85,15 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
         $loader = new \App\Service\DoctrineConfigLoader($logger);
         $loader->loadAndValidate();
 
-        // Get the test connection and setup fixtures
-        $connection = $loader->getConnection('test');
-        \App\Tests\Fixtures\DatabaseFixtures::setup($connection);
+        // Setup fixtures for all connections
+        foreach ($loader->getAllConnections() as $name => $connection) {
+            try {
+                \App\Tests\Fixtures\DatabaseFixtures::setup($connection);
+            } catch (\Exception $e) {
+                // Skip connections that fail (e.g., if Docker isn't running or driver not available)
+                // Tests will fail later with more specific error messages
+                continue;
+            }
+        }
     }
 }

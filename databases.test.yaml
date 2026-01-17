@@ -1,6 +1,32 @@
 doctrine:
-  dbal:
-    connections:
-      test:
-        driver: "pdo_sqlite"
-        memory: true
+    dbal:
+        connections:
+            sqlite:
+                driver: "pdo_sqlite"
+                memory: true
+            mysql:
+                driver: "pdo_mysql"
+                host: "127.0.0.1"
+                port: 3306
+                dbname: "mcp_test"
+                user: "test_user"
+                password: "test_password"
+                serverVersion: "8.0"
+                charset: "utf8mb4"
+            postgres:
+                driver: "pdo_pgsql"
+                host: "127.0.0.1"
+                port: 5432
+                dbname: "mcp_test"
+                user: "test_user"
+                password: "test_password"
+                serverVersion: "16"
+                charset: "utf8"
+            sqlserver:
+                driver: "pdo_sqlsrv"
+                host: "127.0.0.1"
+                port: 1433
+                dbname: "mcp_test"
+                user: "sa"
+                password: "Test@Password123"
+                serverVersion: "2019"

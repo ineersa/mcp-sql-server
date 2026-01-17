@@ -8,3 +8,4 @@ parameters:
         - tests/bootstrap.php
     parallel:
         maximumNumberOfProcesses: 1
+    treatPhpDocTypesAsCertain: false

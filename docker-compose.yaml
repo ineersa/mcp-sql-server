@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+    mysql:
+        image: mysql:8.0
+        environment:
+            MYSQL_ROOT_PASSWORD: root_password
+            MYSQL_DATABASE: mcp_test
+            MYSQL_USER: test_user
+            MYSQL_PASSWORD: test_password
+        ports:
+            - "3306:3306"
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mysqladmin",
+                    "ping",
+                    "-h",
+                    "localhost",
+                    "-u",
+                    "test_user",
+                    "-ptest_password",
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
+
+    postgres:
+        image: postgres:16
+        environment:
+            POSTGRES_DB: mcp_test
+            POSTGRES_USER: test_user
+            POSTGRES_PASSWORD: test_password
+        ports:
+            - "5432:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U test_user -d mcp_test"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
+
+    sqlserver:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        environment:
+            ACCEPT_EULA: "Y"
+            SA_PASSWORD: "Test@Password123"
+            MSSQL_PID: "Developer"
+        ports:
+            - "1433:1433"
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Test@Password123' -Q 'SELECT 1' || exit 1",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s

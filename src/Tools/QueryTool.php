@@ -8,7 +8,6 @@ use App\Service\DoctrineConfigLoader;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
 
-
 final class QueryTool
 {
     public const string NAME = 'query';
