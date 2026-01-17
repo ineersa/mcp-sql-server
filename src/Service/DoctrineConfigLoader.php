@@ -7,6 +7,8 @@ namespace App\Service;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
+use Doctrine\DBAL\Exception\MalformedDsnException;
+use Doctrine\DBAL\Tools\DsnParser;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Yaml\Yaml;
 
@@ -185,51 +187,29 @@ final class DoctrineConfigLoader
         $params = [];
 
         if (isset($config['url']) && \is_string($config['url'])) {
-            $params['url'] = $config['url'];
+            $parser = new DsnParser([
+                'mysql' => 'pdo_mysql',
+                'mysql2' => 'pdo_mysql',
+                'postgres' => 'pdo_pgsql',
+                'postgresql' => 'pdo_pgsql',
+                'pgsql' => 'pdo_pgsql',
+                'sqlite' => 'pdo_sqlite',
+                'sqlite3' => 'pdo_sqlite',
+                'sqlsrv' => 'pdo_sqlsrv',
+                'mssql' => 'pdo_sqlsrv',
+            ]);
 
-            // Parse URL to extract components and driver
-            $parsed = parse_url($config['url']);
-
-            if (false !== $parsed) {
-                // Detect driver from scheme if not provided
-                if (!isset($config['driver']) && isset($parsed['scheme'])) {
-                    $scheme = $parsed['scheme'];
-                    if (str_starts_with($scheme, 'mysql') || str_starts_with($scheme, 'pdo-mysql')) {
-                        $params['driver'] = 'pdo_mysql';
-                    } elseif (str_starts_with($scheme, 'postgres') || str_starts_with($scheme, 'pdo-pgsql')) {
-                        $params['driver'] = 'pdo_pgsql';
-                    } elseif (str_starts_with($scheme, 'sqlite') || str_starts_with($scheme, 'pdo-sqlite')) {
-                        $params['driver'] = 'pdo_sqlite';
-                    } elseif (str_starts_with($scheme, 'sqlsrv') || str_starts_with($scheme, 'mssql') || str_starts_with($scheme, 'pdo-sqlsrv')) {
-                        $params['driver'] = 'pdo_sqlsrv';
-                    }
-                }
-
-                // populate params from URL if not explicitly set in config
-                // This ensures that if DriverManager doesn't fully parse the URL when driver is set, we still have the values.
-                if (isset($parsed['user']) && !isset($config['user'])) {
-                    $params['user'] = $parsed['user'];
-                }
-                if (isset($parsed['pass']) && !isset($config['password'])) {
-                    $params['password'] = $parsed['pass'];
-                }
-                if (isset($parsed['host']) && !isset($config['host'])) {
-                    $params['host'] = $parsed['host'];
-                }
-                if (isset($parsed['port']) && !isset($config['port'])) {
-                    $params['port'] = $parsed['port'];
-                }
-                if (isset($parsed['path']) && !isset($config['dbname'])) {
-                    // path is usually /dbname
-                    $path = ltrim($parsed['path'], '/');
-                    if ('' !== $path) {
-                        $params['dbname'] = $path;
-                    }
-                }
+            try {
+                $params = $parser->parse($config['url']);
+            } catch (MalformedDsnException $e) {
+                // Ignore malformed DSN here, let standard validation or fallback handle it,
+                // or rethrow. Given we have a URL, we expect it to be valid.
+                throw new \RuntimeException(\sprintf('Invalid database URL: %s', $e->getMessage()), previous: $e);
             }
         }
 
         // Always allow explicit overrides or fallback to standard components
+        // Merge config params over URL params
         $keys = ['host', 'port', 'dbname', 'user', 'password', 'driver', 'memory', 'path', 'applicationIntent', 'encrypt', 'trustServerCertificate', 'driverOptions'];
         foreach ($keys as $key) {
             if (isset($config[$key])) {
@@ -250,26 +230,19 @@ final class DoctrineConfigLoader
     /** @param mixed[] $params */
     private function extractDatabaseType(array $params): string
     {
-        if (isset($params['url']) && \is_string($params['url'])) {
-            if (str_starts_with($params['url'], 'mysql://')) {
-                return 'mysql';
-            }
-            if (str_starts_with($params['url'], 'postgresql://') || str_starts_with($params['url'], 'postgres://')) {
-                return 'postgresql';
-            }
-            if (str_starts_with($params['url'], 'sqlite://')) {
-                return 'sqlite';
-            }
-            if (str_starts_with($params['url'], 'sqlsrv://')) {
-                return 'sqlsrv';
-            }
-
-            return 'unknown';
-        }
-
+        // If we have a driver set (which DsnParser or our manual extraction would have done), uses it.
         $driver = $params['driver'] ?? null;
         if (\is_string($driver)) {
             return $driver;
+        }
+
+        // Fallback or explicit check if something is missing
+        if (isset($params['url']) && \is_string($params['url'])) {
+            // This fallback might not be needed if DsnParser works correctly,
+            // but keeping it safe if parsing failed but URL is there (though we throw above).
+            // Actually, if DsnParser works, $params['driver'] MUST be set if the scheme was valid.
+            // If the scheme was unknown to DsnParser mapping, it returns the scheme as driver.
+            // So we likely just return that.
         }
 
         return 'unknown';
