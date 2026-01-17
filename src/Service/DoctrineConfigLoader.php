@@ -186,38 +186,62 @@ final class DoctrineConfigLoader
 
         if (isset($config['url']) && \is_string($config['url'])) {
             $params['url'] = $config['url'];
-        } else {
-            $params['host'] = $config['host'] ?? null;
-            $params['port'] = $config['port'] ?? null;
-            $params['dbname'] = $config['dbname'] ?? null;
-            $params['user'] = $config['user'] ?? null;
-            $params['password'] = $config['password'] ?? null;
-            $params['driver'] = $config['driver'] ?? null;
-            $params['serverVersion'] = $config['version'] ?? $config['serverVersion'] ?? null;
 
-            // SQLite specific parameters
-            if (isset($config['memory'])) {
-                $params['memory'] = $config['memory'];
-            }
-            if (isset($config['path'])) {
-                $params['path'] = $config['path'];
-            }
+            // Parse URL to extract components and driver
+            $parsed = parse_url($config['url']);
 
-            if (isset($config['applicationIntent'])) {
-                $params['applicationIntent'] = $config['applicationIntent'];
-            }
+            if (false !== $parsed) {
+                // Detect driver from scheme if not provided
+                if (!isset($config['driver']) && isset($parsed['scheme'])) {
+                    $scheme = $parsed['scheme'];
+                    if (str_starts_with($scheme, 'mysql') || str_starts_with($scheme, 'pdo-mysql')) {
+                        $params['driver'] = 'pdo_mysql';
+                    } elseif (str_starts_with($scheme, 'postgres') || str_starts_with($scheme, 'pdo-pgsql')) {
+                        $params['driver'] = 'pdo_pgsql';
+                    } elseif (str_starts_with($scheme, 'sqlite') || str_starts_with($scheme, 'pdo-sqlite')) {
+                        $params['driver'] = 'pdo_sqlite';
+                    } elseif (str_starts_with($scheme, 'sqlsrv') || str_starts_with($scheme, 'mssql') || str_starts_with($scheme, 'pdo-sqlsrv')) {
+                        $params['driver'] = 'pdo_sqlsrv';
+                    }
+                }
 
-            if (isset($config['encrypt'])) {
-                $params['encrypt'] = $config['encrypt'];
+                // populate params from URL if not explicitly set in config
+                // This ensures that if DriverManager doesn't fully parse the URL when driver is set, we still have the values.
+                if (isset($parsed['user']) && !isset($config['user'])) {
+                    $params['user'] = $parsed['user'];
+                }
+                if (isset($parsed['pass']) && !isset($config['password'])) {
+                    $params['password'] = $parsed['pass'];
+                }
+                if (isset($parsed['host']) && !isset($config['host'])) {
+                    $params['host'] = $parsed['host'];
+                }
+                if (isset($parsed['port']) && !isset($config['port'])) {
+                    $params['port'] = $parsed['port'];
+                }
+                if (isset($parsed['path']) && !isset($config['dbname'])) {
+                    // path is usually /dbname
+                    $path = ltrim($parsed['path'], '/');
+                    if ('' !== $path) {
+                        $params['dbname'] = $path;
+                    }
+                }
             }
+        }
 
-            if (isset($config['trustServerCertificate'])) {
-                $params['trustServerCertificate'] = $config['trustServerCertificate'];
+        // Always allow explicit overrides or fallback to standard components
+        $keys = ['host', 'port', 'dbname', 'user', 'password', 'driver', 'memory', 'path', 'applicationIntent', 'encrypt', 'trustServerCertificate', 'driverOptions'];
+        foreach ($keys as $key) {
+            if (isset($config[$key])) {
+                $params[$key] = $config[$key];
             }
+        }
 
-            if (isset($config['driverOptions']) && \is_array($config['driverOptions'])) {
-                $params['driverOptions'] = $config['driverOptions'];
-            }
+        // Handle version/serverVersion alias
+        if (isset($config['version'])) {
+            $params['serverVersion'] = $config['version'];
+        } elseif (isset($config['serverVersion'])) {
+            $params['serverVersion'] = $config['serverVersion'];
         }
 
         return $params;

@@ -24,7 +24,7 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
         ];
 
         // Add query execution tests for each database
-        foreach (['sqlite', 'mysql', 'postgres', 'sqlserver'] as $connection) {
+        foreach (['sqlite', 'mysql', 'postgres', 'sqlserver', 'mysql_dsn'] as $connection) {
             $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [
