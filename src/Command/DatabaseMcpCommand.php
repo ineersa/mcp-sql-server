@@ -52,24 +52,24 @@ class DatabaseMcpCommand extends Command
 
             $server = Server::builder()
                 ->setServerInfo(
-                    name: $this->composerMetadataExtractor->getName(),
-                    version: $this->composerMetadataExtractor->getVersion(),
-                    description: 'Run SQL query against chosen database connection.',
+                    $this->composerMetadataExtractor->getName(),
+                    $this->composerMetadataExtractor->getVersion(),
+                    'Run SQL query against chosen database connection.',
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
                 ->setProtocolVersion(ProtocolVersion::V2024_11_05)
                 ->addTool(
-                    handler: QueryTool::class,
-                    name: QueryTool::NAME,
-                    description: QueryTool::getDescription($this->doctrineConfigLoader),
-                    annotations: new ToolAnnotations(
-                        title: QueryTool::TITLE,
-                        readOnlyHint: true,
-                        idempotentHint: true,
-                        destructiveHint: false,
-                        openWorldHint: false
-                    ),
+                    QueryTool::class,
+                    QueryTool::NAME,
+                    QueryTool::getDescription($this->doctrineConfigLoader),
+                    new ToolAnnotations(
+                        QueryTool::TITLE,
+                        true,
+                        true,
+                        false,
+                        false
+                    )
                 )
                 ->build();
 

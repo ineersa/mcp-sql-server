@@ -12,7 +12,7 @@ final class QueryTool
 {
     public const string NAME = 'query';
     public const string TITLE = 'Query database';
-    public const string DESCRIPTION = 'Runs SQL query against chosen database connection.';
+    public const string DESCRIPTION = 'Runs SQL query against chosen database connection. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.';
 
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
