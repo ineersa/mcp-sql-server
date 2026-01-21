@@ -12,7 +12,6 @@ use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\ToolAnnotations;
 use Mcp\Server;
-use Mcp\Server\Transport\StdioTransport;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -52,7 +51,7 @@ class DatabaseMcpCommand extends Command
         try {
             $this->doctrineConfigLoader->loadAndValidate();
 
-            $server = Server::builder()
+            $builder = Server::builder()
                 ->setServerInfo(
                     $this->composerMetadataExtractor->getName(),
                     $this->composerMetadataExtractor->getVersion(),
@@ -60,7 +59,7 @@ class DatabaseMcpCommand extends Command
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
-                ->setProtocolVersion(ProtocolVersion::V2024_11_05)
+                ->setProtocolVersion(ProtocolVersion::V2025_06_18)
                 ->addTool(
                     QueryTool::class,
                     QueryTool::NAME,
@@ -72,24 +71,33 @@ class DatabaseMcpCommand extends Command
                         false,
                         false
                     )
-                )
-                ->addResourceTemplate(
-                    TableResource::class,
-                    TableResource::URI_TEMPLATE,
-                    TableResource::NAME,
-                    TableResource::DESCRIPTION,
-                    mimeType: 'text/plain',
-                )
-                ->addResourceTemplate(
-                    ConnectionResource::class,
-                    ConnectionResource::URI_TEMPLATE,
-                    ConnectionResource::NAME,
+                );
+
+            foreach ($this->doctrineConfigLoader->getConnectionNames() as $connectionName) {
+                $builder->addResource(
+                    function (string $uri) use ($connectionName): string {
+                        $resource = new ConnectionResource($this->doctrineConfigLoader);
+
+                        return $resource($connectionName);
+                    },
+                    "db://{$connectionName}",
+                    $connectionName,
                     ConnectionResource::DESCRIPTION,
                     mimeType: 'text/plain',
-                )
-                ->build();
+                );
+            }
 
-            $transport = new StdioTransport(
+            $builder->addResourceTemplate(
+                TableResource::class,
+                TableResource::URI_TEMPLATE,
+                TableResource::NAME,
+                TableResource::DESCRIPTION,
+                mimeType: 'text/plain',
+            );
+
+            $server = $builder->build();
+
+            $transport = new \App\Transport\LoggingStdioTransport(
                 logger: $this->logger,
             );
 

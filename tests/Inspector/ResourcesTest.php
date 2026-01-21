@@ -30,6 +30,7 @@ final class ResourcesTest extends InspectorSnapshotTestCase
     public static function provideMethods(): array
     {
         $baseTests = [
+            'Resource Listing' => ['method' => 'resources/list'],
             'Resource Template Listing' => ['method' => 'resources/templates/list'],
         ];
 

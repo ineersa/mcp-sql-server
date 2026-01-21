@@ -1,30 +1,27 @@
 {
-  "tools": [
-    {
-      "name": "query",
-      "description": "Runs SQL query against chosen database connection. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "connection": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "connection",
-          "query"
-        ]
-      },
-      "annotations": {
-        "title": "Query database",
-        "readOnlyHint": true,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": false
-      }
-    }
-  ]
+    "tools": [
+        {
+            "name": "query",
+            "description": "Runs SQL query against chosen database connection. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "connection": {
+                        "type": "string"
+                    },
+                    "query": {
+                        "type": "string"
+                    }
+                },
+                "required": ["connection", "query"]
+            },
+            "annotations": {
+                "title": "Query database",
+                "readOnlyHint": true,
+                "destructiveHint": true,
+                "idempotentHint": false,
+                "openWorldHint": false
+            }
+        }
+    ]
 }

@@ -1,114 +1,78 @@
-# Add MCP Resources Capability
+# MCP Resources Implementation - Hybrid Approach
 
-Add resources capability to the MCP server so LLMs can discover database tables and their structure (CREATE TABLE syntax).
+## Summary
 
-## User Review Required
+Implemented a **hybrid approach** for MCP resources to balance discoverability with context efficiency:
 
-> [!IMPORTANT]
-> **URI Scheme Design**: Resources will use a `db://` scheme with the pattern:
->
-> - `db://{connection}/{table}` — for reading individual table schema
->
-> Alternative considered: `mysql://` or `database://` schemes, but `db://` is shorter and database-agnostic.
+1. **Static Resources** for database connections (`db://{connection}`)
+2. **Resource Template** for table schemas (`db://{connection}/{table}`)
 
-> [!NOTE]
-> **Resource Discovery Strategy**: MCP supports two approaches:
->
-> 1. **Static Resources** — Registered individually for each table (would require loading all tables at startup)
-> 2. **Resource Templates** — A URI pattern like `db://{connection}/{table}` that matches dynamically
->
-> **Recommendation**: Use **Resource Templates** since tables are dynamic and we don't want to enumerate all tables upfront.
+## Problem
 
----
+Initial implementation used resource templates for both connections and tables. However, testing revealed that MCP clients (like opencode) **do not request resource templates** via `resources/templates/list`. They only request `resources/list` for static resources.
 
-## Proposed Changes
+This created a discoverability problem: LLMs couldn't discover available connections or tables.
 
-### Core Service
+## Solution: Hybrid Approach
 
-#### [MODIFY] [DoctrineConfigLoader.php](file:///home/ineersa/mcp-servers/mysql-server/src/Service/DoctrineConfigLoader.php)
+### Why Hybrid?
 
-Add methods to retrieve table information from connections:
+- **Connections**: Small, fixed number (typically 1-5) → Use **static resources**
+    - Clients can discover via `resources/list`
+    - Minimal context bloat
 
-```php
-/**
- * Get all table names for a connection.
- * @return string[]
- */
-public function getTableNames(string $connectionName): array
+- **Tables**: Potentially hundreds per connection → Use **resource template**
+    - Avoids bloating context with hundreds of static resources
+    - LLM constructs URIs based on connection resource content
+    - Template still works even if client doesn't auto-discover it
 
-/**
- * Get CREATE TABLE syntax for a specific table.
- */
-public function getCreateTableSql(string $connectionName, string $tableName): string
-```
+### Implementation
 
----
-
-### New Resource Handler
-
-#### [NEW] [TableResource.php](file:///home/ineersa/mcp-servers/mysql-server/src/Resources/TableResource.php)
-
-Create a new resource handler class following MCP SDK patterns:
+#### Static Resources (Connections)
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Resources;
-
-use App\Service\DoctrineConfigLoader;
-
-final class TableResource
-{
-    public const string URI_TEMPLATE = 'db://{connection}/{table}';
-    public const string NAME = 'table';
-    public const string DESCRIPTION = 'Database table schema (CREATE TABLE syntax)';
-
-    public function __construct(
-        private DoctrineConfigLoader $doctrineConfigLoader,
-    ) {}
-
-    public function __invoke(string $connection, string $table): string
-    {
-        return $this->doctrineConfigLoader->getCreateTableSql($connection, $table);
-    }
+// Register each connection as a static resource
+foreach ($connectionNames as $connectionName) {
+    $builder->addResource(
+        function (string $uri) use ($connectionName): string {
+            $resource = new ConnectionResource($doctrineConfigLoader);
+            return $resource($connectionName);
+        },
+        "db://{$connectionName}",  // e.g., "db://products"
+        $connectionName,
+        ConnectionResource::DESCRIPTION,
+        mimeType: 'text/plain',
+    );
 }
 ```
 
----
+**Result**: `resources/list` returns:
 
-### Registration
-
-#### [MODIFY] [DatabaseMcpCommand.php](file:///home/ineersa/mcp-servers/mysql-server/src/Command/DatabaseMcpCommand.php)
-
-Register the resource template with the MCP server builder:
-
-```diff
-+use App\Resources\TableResource;
-
- $server = Server::builder()
-     ->setServerInfo(...)
-     ->setLogger(...)
-     ->setContainer(...)
-     ->addTool(...)
-+    ->addResourceTemplate(
-+        TableResource::class,
-+        TableResource::URI_TEMPLATE,
-+        TableResource::NAME,
-+        TableResource::DESCRIPTION,
-+        mimeType: 'text/plain',
-+    )
-     ->build();
+```json
+{
+  "resources": [
+    {"uri": "db://local", "name": "local", ...},
+    {"uri": "db://products", "name": "products", ...},
+    {"uri": "db://users", "name": "users", ...},
+    {"uri": "db://server", "name": "server", ...}
+  ]
+}
 ```
 
----
+#### Resource Template (Tables)
 
-### Test Updates
+```php
+// Register table template for dynamic table access
+$builder->addResourceTemplate(
+    TableResource::class,
+    TableResource::URI_TEMPLATE,  // "db://{connection}/{table}"
+    TableResource::NAME,
+    TableResource::DESCRIPTION,
+    mimeType: 'text/plain',
+);
+```
 
-#### [MODIFY] [resources_templates_list.json](file:///home/ineersa/mcp-servers/mysql-server/tests/__snapshots__/resources_templates_list.json)
-
-Update snapshot to include the new resource template:
+**Result**: `resources/templates/list` returns:
 
 ```json
 {
@@ -116,68 +80,51 @@ Update snapshot to include the new resource template:
         {
             "uriTemplate": "db://{connection}/{table}",
             "name": "table",
-            "description": "Database table schema (CREATE TABLE syntax)",
+            "description": "Database table schema (CREATE TABLE syntax)...",
             "mimeType": "text/plain"
         }
     ]
 }
 ```
 
----
+### User Flow
 
-## Verification Plan
+1. **LLM discovers connections**: Requests `resources/list` → sees `db://products`, `db://users`, etc.
+2. **LLM reads connection resource**: Requests `db://products` → gets list of tables
+3. **LLM reads table schema**: Requests `db://products/orders` → gets CREATE TABLE syntax
 
-### Automated Tests
+Even if the client doesn't discover the template, the LLM can construct table URIs from the QueryTool description which instructs it to use `db://{connection}/{table}` pattern.
 
-1. **Run existing test suite** to ensure no regressions:
+## Files Modified
 
-    ```bash
-    composer tests
-    ```
+### Core Implementation
 
-2. **Add integration test** for resource reading in `tests/Inspector/`:
-    - Create `TableResourceTest.php` to test reading table schema via MCP protocol
-    - Test valid connection/table combinations
-    - Test error handling for invalid connections or tables
+- **`src/Command/DatabaseMcpCommand.php`**
+    - Registers static resources for each connection
+    - Registers resource template for tables
+    - Uses closure wrappers to invoke resource classes correctly
 
-## MCP Resources Feature Walkthrough
+### Resource Handlers (Unchanged)
 
-## Summary
+- **`src/Resources/ConnectionResource.php`** - Lists tables for a connection
+- **`src/Resources/TableResource.php`** - Returns CREATE TABLE syntax
 
-Added MCP resources capability using resource template patterns:
+### Tests Updated
 
-- `db://{connection}` — List available tables in a database connection
-- `db://{connection}/{table}` — Get CREATE TABLE syntax for a specific table
-
-## Changes Made
-
-### New Files
-
-- [ConnectionResource.php](file:///home/ineersa/mcp-servers/mysql-server/src/Resources/ConnectionResource.php) — Resource handler that lists available tables
-- [TableResource.php](file:///home/ineersa/mcp-servers/mysql-server/src/Resources/TableResource.php) — Resource handler that returns CREATE TABLE syntax
-
-### Modified Files
-
-- [DoctrineConfigLoader.php](file:///home/ineersa/mcp-servers/mysql-server/src/Service/DoctrineConfigLoader.php) — Added `getTableNames()` and `getCreateTableSql()` methods
-
-render_diffs(file:///home/ineersa/mcp-servers/mysql-server/src/Service/DoctrineConfigLoader.php)
-
-- [DatabaseMcpCommand.php](file:///home/ineersa/mcp-servers/mysql-server/src/Command/DatabaseMcpCommand.php) — Registered resource templates
-
-render_diffs(file:///home/ineersa/mcp-servers/mysql-server/src/Command/DatabaseMcpCommand.php)
+- **`tests/Inspector/ResourcesTest.php`** - Added test for `resources/list`
+- **`tests/Inspector/__snapshots__/Resources/resources_list.json`** - Snapshot for connection resources
+- **`tests/Inspector/__snapshots__/Resources/resources_templates_list.json`** - Updated to only include table template
+- **`tests/Inspector/__snapshots__/QueryToolSelect/tools_list.json`** - Updated with resource usage instructions
 
 ## Verification
 
-| Check                                | Result          |
-| ------------------------------------ | --------------- |
-| Code style (`composer cs-fix`)       | ✅ Passed       |
-| Static analysis (`composer phpstan`) | ✅ Passed       |
-| Tests (`composer tests`)             | ✅ 19/19 passed |
+✅ All tests passing (29 tests, 69 assertions)
+✅ Code style check passed
+✅ Static analysis passed (PHPStan level 6)
 
-## Usage
+## Benefits
 
-LLMs can now:
-
-1. **List resource templates** — Discovers `db://{connection}` and `db://{connection}/{table}` patterns
-2. **List tables in a connection** — Request `db://products` to get a list of available tables
-3. **Read a table schema** — Request `db://products/users` to get the CREATE TABLE syntax for the `users` table
+1. **Discoverability**: Connections are discoverable via standard `resources/list`
+2. **Efficiency**: Avoids context bloat from hundreds of table resources
+3. **Flexibility**: Template pattern still works for table access
+4. **Client Compatibility**: Works with clients that don't request templates
