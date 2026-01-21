@@ -2,15 +2,17 @@
     "tools": [
         {
             "name": "query",
-            "description": "Runs SQL query against chosen database connection. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
+            "description": "Runs SQL query against chosen database connection. Multiple queries can be executed if separated by semicolons. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "connection": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The name of the database connection to use."
                     },
                     "query": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "The SQL query (or queries) to execute. Multiple queries must be separated by semicolons."
                     }
                 },
                 "required": ["connection", "query"]
