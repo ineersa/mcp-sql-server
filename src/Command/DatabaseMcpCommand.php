@@ -56,7 +56,7 @@ class DatabaseMcpCommand extends Command
                 ->setServerInfo(
                     $this->composerMetadataExtractor->getName(),
                     $this->composerMetadataExtractor->getVersion(),
-                    description: 'Run SQL query against chosen database connection.',
+                    'Run SQL query against chosen database connection.',
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)

@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://local/users",
+      "mimeType": "text/plain",
+      "text": "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT DEFAULT NULL, name CLOB NOT NULL COLLATE \"BINARY\", email CLOB NOT NULL COLLATE \"BINARY\");"
+    }
+  ]
+}
