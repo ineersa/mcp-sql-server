@@ -5,23 +5,9 @@ doctrine:
                 driver: "pdo_sqlite"
                 memory: true
             mysql:
-                driver: "pdo_mysql"
-                host: "127.0.0.1"
-                port: 13306
-                dbname: "mcp_test"
-                user: "test_user"
-                password: "test_password"
-                serverVersion: "8.0"
-                charset: "utf8mb4"
+                url: "mysql://test_user:test_password@127.0.0.1:13306/mcp_test?serverVersion=8.0&charset=utf8mb4"
             postgres:
-                driver: "pdo_pgsql"
-                host: "127.0.0.1"
-                port: 15432
-                dbname: "mcp_test"
-                user: "test_user"
-                password: "test_password"
-                serverVersion: "16"
-                charset: "utf8"
+                url: "%env(POSTGRES_DSN)%"
             sqlserver:
                 driver: "pdo_sqlsrv"
                 host: "127.0.0.1"

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Inspector;
 
-final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
+final class QueryToolSelectTest extends InspectorSnapshotTestCase
 {
     protected function setUp(): void
     {
@@ -50,7 +50,7 @@ final class DatabaseMcpCommandTest extends InspectorSnapshotTestCase
         $testSlug = $testName ? '_'.$testName : '';
 
         return \sprintf(
-            '%s/tests/Inspector/__snapshots__/DatabaseMcpCommand/%s%s.json',
+            '%s/tests/Inspector/__snapshots__/QueryToolSelect/%s%s.json',
             \dirname(__DIR__, 2),
             $methodSlug,
             $testSlug

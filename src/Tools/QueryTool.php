@@ -47,4 +47,25 @@ final class QueryTool
             );
         }
     }
+
+    public static function getDescription(DoctrineConfigLoader $doctrineConfigLoader): string
+    {
+        $description = self::DESCRIPTION;
+
+        $description .= 'Available connections:';
+
+        foreach ($doctrineConfigLoader->getConnectionNames() as $connectionName) {
+            $conn = $doctrineConfigLoader->getConnection($connectionName);
+            $params = $conn->getParams();
+            $description .= \sprintf(
+                "\n%s: %s (host: %s, database: %s)",
+                $connectionName,
+                $params['driver'] ?? 'unknown',
+                $params['host'] ?? 'unknown',
+                $params['dbname'] ?? 'unknown',
+            );
+        }
+
+        return $description;
+    }
 }

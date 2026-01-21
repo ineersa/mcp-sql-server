@@ -30,7 +30,7 @@
     },
 
     // --- Files & Search Exclusions ---
-    "files.autoSave": "afterDelay",
+    "files.autoSave": "onFocusChange",
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
     "search.useIgnoreFiles": true,
@@ -105,5 +105,8 @@
     },
 
     // --- Git ---
-    "git.blame.statusBarItem.enabled": true
+    "git.blame.statusBarItem.enabled": true,
+    // --- Error Lens ---
+    "errorLens.messageEnabled": true,
+    "errorLens.problemRangeDecorationEnabled": true
 }

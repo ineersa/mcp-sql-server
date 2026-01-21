@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\ComposerMetadataExtractor;
-use App\Service\DatabaseInitializer;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
+use Mcp\Schema\ToolAnnotations;
 use Mcp\Server;
 use Mcp\Server\Transport\StdioTransport;
 use Psr\Container\ContainerInterface;
@@ -34,7 +34,6 @@ class DatabaseMcpCommand extends Command
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
         private DoctrineConfigLoader $doctrineConfigLoader,
-        private DatabaseInitializer $databaseInitializer,
     ) {
         parent::__construct();
     }
@@ -51,9 +50,6 @@ class DatabaseMcpCommand extends Command
         try {
             // Load and validate database connections
             $this->doctrineConfigLoader->loadAndValidate();
-
-            // Initialize in-memory databases with test fixtures (if any)
-            $this->databaseInitializer->initializeTestDatabases();
 
             // Generate dynamic description with available connections
             $connectionNames = $this->doctrineConfigLoader->getConnectionNames();
@@ -77,7 +73,18 @@ class DatabaseMcpCommand extends Command
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
                 ->setProtocolVersion(ProtocolVersion::V2024_11_05)
-                ->addTool(QueryTool::class)
+                ->addTool(
+                    handler: QueryTool::class,
+                    name: QueryTool::NAME,
+                    description: QueryTool::getDescription($this->doctrineConfigLoader),
+                    annotations: new ToolAnnotations(
+                        title: QueryTool::TITLE,
+                        readOnlyHint: true,
+                        idempotentHint: true,
+                        destructiveHint: false,
+                        openWorldHint: false
+                    ),
+                )
                 ->build();
 
             $transport = new StdioTransport(
