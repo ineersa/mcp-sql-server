@@ -51,24 +51,11 @@ class DatabaseMcpCommand extends Command
             // Load and validate database connections
             $this->doctrineConfigLoader->loadAndValidate();
 
-            // Generate dynamic description with available connections
-            $connectionNames = $this->doctrineConfigLoader->getConnectionNames();
-            $connectionInfo = [];
-            foreach ($connectionNames as $name) {
-                $type = $this->doctrineConfigLoader->getConnectionType($name);
-                $connectionInfo[] = \sprintf('%s (%s)', $name, $type ?? 'unknown');
-            }
-
-            $description = $this->composerMetadataExtractor->getDescription();
-            if ([] !== $connectionInfo) {
-                $description .= \sprintf(' | Available connections: %s', implode(', ', $connectionInfo));
-            }
-
             $server = Server::builder()
                 ->setServerInfo(
                     name: $this->composerMetadataExtractor->getName(),
                     version: $this->composerMetadataExtractor->getVersion(),
-                    description: $description,
+                    description: 'Run SQL query against chosen database connection.',
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)

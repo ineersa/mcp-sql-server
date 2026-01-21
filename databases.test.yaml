@@ -3,7 +3,7 @@ doctrine:
         connections:
             sqlite:
                 driver: "pdo_sqlite"
-                memory: true
+                path: "var/test.sqlite"
             mysql:
                 url: "mysql://test_user:test_password@127.0.0.1:13306/mcp_test?serverVersion=8.0&charset=utf8mb4"
             postgres:

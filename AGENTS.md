@@ -92,8 +92,8 @@ To run a single test file or specific test case, use the PHPUnit binary directly
 - **Variables/Properties**: `camelCase` (e.g., `$tableName`).
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_TIMEOUT`).
 - **Namespaces**: PSR-4, starting with `App\`.
-    Source: `src/` -> `App\`
-    Tests: `tests/` -> `App\Tests\`
+  Source: `src/` -> `App\`
+  Tests: `tests/` -> `App\Tests\`
 
 ### Project Structure
 
@@ -133,6 +133,11 @@ Follow the order defined in `.php-cs-fixer.dist.php`:
 
 ## 3. Testing Guidelines
 
+- **Prerequisites**:
+    - **Database Containers**: Before running tests, check if database containers
+      are running. If they are not, start them with `docker compose up -d`.
+    - **MCP Inspector**: Ensure `npx @modelcontextprotocol/inspector` is **NOT**
+      running before starting tests, as it will cause them to hang.
 - **Framework**: PHPUnit 12.
 - **Location**: Tests reside in `tests/` and should mirror the `src/` directory
   structure.
@@ -161,6 +166,7 @@ Follow the order defined in `.php-cs-fixer.dist.php`:
     - _Always_ add `declare(strict_types=1);`.
     - _Always_ add return types and property types.
 4. **Test**:
+    - Ensure prerequisites (database containers running, inspector stopped) are met.
     - Create or update a test case in `tests/`.
     - Run the specific test using `vendor/bin/phpunit path/to/test`.
 5. **Refine**:

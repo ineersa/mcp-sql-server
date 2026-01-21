@@ -1,7 +1,8 @@
 {
   "tools": [
     {
-      "name": "QueryTool",
+      "name": "query",
+      "description": "Runs SQL query against chosen database connection.\nAvailable connections:\n - sqlite : SQLite, version 3.45.1\n - mysql : MySQL, version 8.0\n - postgres : Postgres, version 16\n - sqlserver : SQL Server, version 2019",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -16,6 +17,13 @@
           "connection",
           "query"
         ]
+      },
+      "annotations": {
+        "title": "Query database",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
       }
     }
   ]

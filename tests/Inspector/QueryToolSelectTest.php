@@ -10,8 +10,16 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
     {
         parent::setUp();
 
+        $this->cleanupDatabase();
+
         // Initialize all test databases with fixtures
         $this->initializeTestDatabases();
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->cleanupDatabase();
     }
 
     /**
@@ -28,7 +36,7 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
             $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [
-                    'toolName' => 'QueryTool',
+                    'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => $connection,
                         'query' => 'SELECT * FROM users ORDER BY id',
@@ -70,6 +78,14 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
     protected function getTransport(): string
     {
         return 'stdio';
+    }
+
+    private function cleanupDatabase(): void
+    {
+        $file = \dirname(__DIR__, 2).'/var/test.sqlite';
+        if (file_exists($file)) {
+            unlink($file);
+        }
     }
 
     /**

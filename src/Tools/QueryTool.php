@@ -52,17 +52,42 @@ final class QueryTool
     {
         $description = self::DESCRIPTION;
 
-        $description .= 'Available connections:';
+        $description .= "\nAvailable connections:";
 
         foreach ($doctrineConfigLoader->getConnectionNames() as $connectionName) {
             $conn = $doctrineConfigLoader->getConnection($connectionName);
             $params = $conn->getParams();
+            $driver = $params['driver'] ?? 'unknown';
+
+            $platform = match ($driver) {
+                'pdo_mysql' => 'MySQL',
+                'pdo_pgsql' => 'Postgres',
+                'pdo_sqlite' => 'SQLite',
+                'pdo_sqlsrv' => 'SQL Server',
+                default => $driver,
+            };
+
+            $version = $params['serverVersion'] ?? null;
+
+            if (null === $version) {
+                try {
+                    $rawVersion = $conn->getServerVersion();
+
+                    if ('MySQL' === $platform && false !== stripos($rawVersion, 'MariaDB')) {
+                        $platform = 'MariaDB';
+                    }
+
+                    $version = $rawVersion;
+                } catch (\Throwable) {
+                    $version = 'unknown';
+                }
+            }
+
             $description .= \sprintf(
-                "\n%s: %s (host: %s, database: %s)",
+                "\n - %s : %s, version %s",
                 $connectionName,
-                $params['driver'] ?? 'unknown',
-                $params['host'] ?? 'unknown',
-                $params['dbname'] ?? 'unknown',
+                $platform,
+                $version
             );
         }
 
