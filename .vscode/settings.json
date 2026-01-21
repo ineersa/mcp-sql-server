@@ -83,7 +83,7 @@
     },
     // --- Markdown ---
     "[markdown]": {
-        "editor.defaultFormatter": "prettier.prettier-vscode",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true
     },
     "markdown.preview.fontSize": 18,
@@ -96,16 +96,17 @@
         "editor.formatOnSave": true
     },
     "[json]": {
-        "editor.defaultFormatter": "prettier.prettier-vscode",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true
     },
     "[jsonc]": {
-        "editor.defaultFormatter": "prettier.prettier-vscode",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true
     },
 
     // --- Git ---
     "git.blame.statusBarItem.enabled": true,
+
     // --- Error Lens ---
     "errorLens.messageEnabled": true,
     "errorLens.problemRangeDecorationEnabled": true

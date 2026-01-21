@@ -12,6 +12,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Dotenv\Dotenv;
 
 #[AsCommand(
     name: 'database:fixtures:load',
@@ -40,6 +41,12 @@ final class LoadFixturesCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
+        // Always load .env.test to ensure we have the correct configuration for fixtures
+        $projectDir = \dirname(__DIR__, 2);
+        if (file_exists($projectDir.'/.env.test')) {
+            (new Dotenv())->overload($projectDir.'/.env.test');
+        }
+
         try {
             $this->configLoader->loadAndValidate();
         } catch (\Exception $e) {
@@ -66,6 +73,7 @@ final class LoadFixturesCommand extends Command
             $io->section(\sprintf('Connection: %s', $name));
 
             try {
+                DatabaseFixtures::teardown($connection);
                 DatabaseFixtures::setup($connection);
 
                 // Detect database type from connection params

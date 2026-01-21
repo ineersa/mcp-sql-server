@@ -48,7 +48,6 @@ class DatabaseMcpCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
-            // Load and validate database connections
             $this->doctrineConfigLoader->loadAndValidate();
 
             $server = Server::builder()

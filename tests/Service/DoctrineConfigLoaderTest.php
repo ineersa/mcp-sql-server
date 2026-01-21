@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Service\DoctrineConfigLoader;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 
+#[CoversClass(DoctrineConfigLoader::class)]
 final class DoctrineConfigLoaderTest extends TestCase
 {
     private string $tempDir;
@@ -22,7 +24,7 @@ final class DoctrineConfigLoaderTest extends TestCase
         $filesystem->mkdir($this->tempDir);
         $this->configFile = $this->tempDir.'/doctrine.yaml';
 
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
     }
 
     protected function tearDown(): void
@@ -107,7 +109,9 @@ YAML);
         file_put_contents($this->configFile, <<<YAML
 doctrine:
     dbal:
-        url: 'mysql://invalid:invalid@invalidhost:9999/invalid?serverVersion=8.0'
+        connections:
+            default:
+                driver: 'invalid_driver'
 YAML);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
