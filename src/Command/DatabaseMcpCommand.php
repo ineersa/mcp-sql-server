@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Resources\ConnectionResource;
+use App\Resources\TableResource;
 use App\Service\ComposerMetadataExtractor;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
@@ -54,7 +56,7 @@ class DatabaseMcpCommand extends Command
                 ->setServerInfo(
                     $this->composerMetadataExtractor->getName(),
                     $this->composerMetadataExtractor->getVersion(),
-                    'Run SQL query against chosen database connection.',
+                    description: 'Run SQL query against chosen database connection.',
                 )
                 ->setLogger($this->logger)
                 ->setContainer($this->container)
@@ -70,6 +72,20 @@ class DatabaseMcpCommand extends Command
                         false,
                         false
                     )
+                )
+                ->addResourceTemplate(
+                    TableResource::class,
+                    TableResource::URI_TEMPLATE,
+                    TableResource::NAME,
+                    TableResource::DESCRIPTION,
+                    mimeType: 'text/plain',
+                )
+                ->addResourceTemplate(
+                    ConnectionResource::class,
+                    ConnectionResource::URI_TEMPLATE,
+                    ConnectionResource::NAME,
+                    ConnectionResource::DESCRIPTION,
+                    mimeType: 'text/plain',
                 )
                 ->build();
 

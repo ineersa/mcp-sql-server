@@ -73,6 +73,39 @@ final class DoctrineConfigLoader
         return $this->connections[$name]['version'] ?? null;
     }
 
+    /**
+     * Get all table names for a connection.
+     *
+     * @return string[]
+     */
+    public function getTableNames(string $connectionName): array
+    {
+        $connection = $this->getConnection($connectionName);
+        $schemaManager = $connection->createSchemaManager();
+
+        return $schemaManager->listTableNames();
+    }
+
+    /**
+     * Get CREATE TABLE syntax for a specific table.
+     */
+    public function getCreateTableSql(string $connectionName, string $tableName): string
+    {
+        $connection = $this->getConnection($connectionName);
+        $schemaManager = $connection->createSchemaManager();
+        $platform = $connection->getDatabasePlatform();
+
+        $tables = $schemaManager->listTableNames();
+        if (!\in_array($tableName, $tables, true)) {
+            throw new \InvalidArgumentException(\sprintf('Table "%s" does not exist in connection "%s".', $tableName, $connectionName));
+        }
+
+        $table = $schemaManager->introspectTable($tableName);
+        $createTableSql = $platform->getCreateTableSQL($table);
+
+        return implode(";\n", $createTableSql).';';
+    }
+
     private function getConfigFilePath(): string
     {
         $configFile = $_ENV['DATABASE_CONFIG_FILE'] ?? null;
