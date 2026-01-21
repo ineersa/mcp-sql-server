@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use App\Resources\ConnectionResource;
-use App\Resources\TableResource;
 use App\Service\ComposerMetadataExtractor;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
@@ -72,28 +70,6 @@ class DatabaseMcpCommand extends Command
                         false
                     )
                 );
-
-            foreach ($this->doctrineConfigLoader->getConnectionNames() as $connectionName) {
-                $builder->addResource(
-                    function (string $uri) use ($connectionName): string {
-                        $resource = new ConnectionResource($this->doctrineConfigLoader);
-
-                        return $resource($connectionName);
-                    },
-                    "db://{$connectionName}",
-                    $connectionName,
-                    ConnectionResource::DESCRIPTION,
-                    mimeType: 'text/plain',
-                );
-            }
-
-            $builder->addResourceTemplate(
-                TableResource::class,
-                TableResource::URI_TEMPLATE,
-                TableResource::NAME,
-                TableResource::DESCRIPTION,
-                mimeType: 'text/plain',
-            );
 
             $server = $builder->build();
 
