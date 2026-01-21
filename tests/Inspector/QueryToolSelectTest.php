@@ -32,7 +32,7 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
         ];
 
         // Add query execution tests for each database
-        foreach (['sqlite', 'mysql', 'postgres', 'sqlserver'] as $connection) {
+        foreach (['local', 'products', 'users', 'server'] as $connection) {
             $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [

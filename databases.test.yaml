@@ -1,14 +1,14 @@
 doctrine:
     dbal:
         connections:
-            sqlite:
+            local:
                 driver: "pdo_sqlite"
                 path: "var/test.sqlite"
-            mysql:
+            products:
                 url: "mysql://test_user:test_password@127.0.0.1:13306/mcp_test?serverVersion=8.0&charset=utf8mb4"
-            postgres:
+            users:
                 url: "%env(POSTGRES_DSN)%"
-            sqlserver:
+            server:
                 driver: "pdo_sqlsrv"
                 host: "127.0.0.1"
                 port: 11433
