@@ -51,7 +51,6 @@ final class QueryTool
             return new CallToolResult(
                 content: [
                     new TextContent($markdown),
-                    new TextContent($structuredJson),
                 ],
                 isError: false,
                 structuredContent: ['results' => $results],
