@@ -19,9 +19,17 @@ final class ReadOnlyDriver extends AbstractDriverMiddleware
         #[\SensitiveParameter]
         array $params,
     ): DriverConnection {
+        $driver = $params['driver'] ?? '';
+
+        if (str_contains($driver, 'sqlsrv')) {
+            $paramsLower = array_change_key_case($params, \CASE_LOWER);
+            if (!isset($paramsLower['applicationintent'])) {
+                $params['ApplicationIntent'] = 'ReadOnly';
+            }
+        }
+
         $connection = parent::connect($params);
 
-        $driver = $params['driver'] ?? '';
         $readOnlyQuery = $this->getReadOnlyQuery($driver);
 
         if (null !== $readOnlyQuery) {
@@ -42,7 +50,7 @@ final class ReadOnlyDriver extends AbstractDriverMiddleware
             str_contains($driver, 'mysql') => 'SET SESSION transaction_read_only = 1',
             str_contains($driver, 'pgsql') => 'SET default_transaction_read_only = on',
             str_contains($driver, 'sqlite') => 'PRAGMA query_only = ON',
-            // SQL Server: ApplicationIntent=ReadOnly should be in DSN
+            // SQL Server: ApplicationIntent=ReadOnly is handled in connect()
             // No SET command needed here
             default => null,
         };

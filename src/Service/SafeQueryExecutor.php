@@ -39,9 +39,6 @@ final class SafeQueryExecutor
      * 2. Platform SET commands (configured via middleware)
      * 3. Sandboxed execution with automatic rollback.
      *
-     * @param Connection $conn The database connection
-     * @param string     $sql  The SQL query to execute
-     *
      * @return array<int, array<string, mixed>> Query results
      *
      * @throws Exception
@@ -67,22 +64,11 @@ final class SafeQueryExecutor
 
     private function validateSql(string $sql): void
     {
-        $sqlForInspection = $this->normalizeSql($sql);
-
         foreach (self::FORBIDDEN_KEYWORDS as $keyword) {
             // Match whole words only using word boundaries (\b)
-            if (preg_match('/\b'.$keyword.'\b/i', $sqlForInspection)) {
+            if (preg_match('/\b'.$keyword.'\b/i', $sql)) {
                 throw new \RuntimeException(\sprintf('Security violation: Keyword "%s" is not allowed in read-only mode.', $keyword));
             }
         }
-    }
-
-    private function normalizeSql(string $sql): string
-    {
-        $sql = preg_replace('/--[^\n]*/', '', $sql) ?? $sql;
-
-        $sql = preg_replace('/\/\*.*?\*\//s', '', $sql) ?? $sql;
-
-        return preg_replace('/\s+/', ' ', $sql) ?? $sql;
     }
 }

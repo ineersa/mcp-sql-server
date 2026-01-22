@@ -21,7 +21,9 @@ final class SafeQueryExecutorTest extends TestCase
     #[\PHPUnit\Framework\Attributes\DataProvider('forbiddenKeywordsProvider')]
     public function testBlocksForbiddenKeywords(string $sql, string $expectedKeyword): void
     {
-        $connection = $this->createMock(Connection::class);
+        // Use stub because we don't expect any calls on the connection
+        // (validation throws exception before interaction)
+        $connection = $this->createStub(Connection::class);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage(\sprintf('Security violation: Keyword "%s" is not allowed', $expectedKeyword));
@@ -54,41 +56,10 @@ final class SafeQueryExecutorTest extends TestCase
         ];
     }
 
-    public function testBlocksForbiddenKeywordsInComments(): void
-    {
-        $connection = $this->createMock(Connection::class);
-
-        // Comments should be stripped, so INSERT in comment should not trigger
-        $sql = '-- INSERT comment
-SELECT * FROM users';
-
-        $result = $this->createMock(Result::class);
-        $result->method('fetchAllAssociative')->willReturn([['id' => 1]]);
-
-        $connection->expects($this->once())
-            ->method('beginTransaction');
-
-        $connection->expects($this->once())
-            ->method('executeQuery')
-            ->with($sql)
-            ->willReturn($result);
-
-        $connection->expects($this->once())
-            ->method('isTransactionActive')
-            ->willReturn(true);
-
-        $connection->expects($this->once())
-            ->method('rollBack');
-
-        $rows = $this->executor->execute($connection, $sql);
-
-        $this->assertSame([['id' => 1]], $rows);
-    }
-
     public function testAllowsSelectQueries(): void
     {
         $connection = $this->createMock(Connection::class);
-        $result = $this->createMock(Result::class);
+        $result = $this->createStub(Result::class);
 
         $sql = 'SELECT * FROM users WHERE id = 1';
         $expectedRows = [['id' => 1, 'name' => 'Test']];
@@ -118,7 +89,7 @@ SELECT * FROM users';
     public function testAlwaysRollsBackTransaction(): void
     {
         $connection = $this->createMock(Connection::class);
-        $result = $this->createMock(Result::class);
+        $result = $this->createStub(Result::class);
 
         $result->method('fetchAllAssociative')->willReturn([]);
 
