@@ -9,5 +9,30 @@
       "text": "[\n    {\n        \"query\": \"SELECT * FROM users ORDER BY id\",\n        \"count\": 3,\n        \"rows\": [\n            {\n                \"id\": \"1\",\n                \"name\": \"Judy\",\n                \"email\": \"judy@example.com\"\n            },\n            {\n                \"id\": \"2\",\n                \"name\": \"Karl\",\n                \"email\": \"karl@example.com\"\n            },\n            {\n                \"id\": \"3\",\n                \"name\": \"Laura\",\n                \"email\": \"laura@example.com\"\n            }\n        ]\n    }\n]"
     }
   ],
+  "structuredContent": {
+    "results": [
+      {
+        "query": "SELECT * FROM users ORDER BY id",
+        "count": 3,
+        "rows": [
+          {
+            "id": "1",
+            "name": "Judy",
+            "email": "judy@example.com"
+          },
+          {
+            "id": "2",
+            "name": "Karl",
+            "email": "karl@example.com"
+          },
+          {
+            "id": "3",
+            "name": "Laura",
+            "email": "laura@example.com"
+          }
+        ]
+      }
+    ]
+  },
   "isError": false
 }

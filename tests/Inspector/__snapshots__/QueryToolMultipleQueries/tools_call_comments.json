@@ -9,5 +9,36 @@
       "text": "[\n    {\n        \"query\": \"SELECT 1 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 1\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT 2 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 2\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT 3 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 3\n            }\n        ]\n    }\n]"
     }
   ],
+  "structuredContent": {
+    "results": [
+      {
+        "query": "SELECT 1 as val",
+        "count": 1,
+        "rows": [
+          {
+            "val": 1
+          }
+        ]
+      },
+      {
+        "query": "SELECT 2 as val",
+        "count": 1,
+        "rows": [
+          {
+            "val": 2
+          }
+        ]
+      },
+      {
+        "query": "SELECT 3 as val",
+        "count": 1,
+        "rows": [
+          {
+            "val": 3
+          }
+        ]
+      }
+    ]
+  },
   "isError": false
 }

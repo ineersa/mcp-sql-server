@@ -54,6 +54,7 @@ final class QueryTool
                     new TextContent($structuredJson),
                 ],
                 isError: false,
+                structuredContent: ['results' => $results],
             );
         } catch (\Throwable $e) {
             return new CallToolResult(

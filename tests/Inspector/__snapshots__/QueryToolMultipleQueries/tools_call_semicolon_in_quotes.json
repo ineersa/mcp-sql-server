@@ -9,5 +9,27 @@
       "text": "[\n    {\n        \"query\": \"SELECT ';'\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"';'\": \";\"\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT \\\"'\\\"\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"\\\"'\\\"\": \"'\"\n            }\n        ]\n    }\n]"
     }
   ],
+  "structuredContent": {
+    "results": [
+      {
+        "query": "SELECT ';'",
+        "count": 1,
+        "rows": [
+          {
+            "';'": ";"
+          }
+        ]
+      },
+      {
+        "query": "SELECT \"'\"",
+        "count": 1,
+        "rows": [
+          {
+            "\"'\"": "'"
+          }
+        ]
+      }
+    ]
+  },
   "isError": false
 }

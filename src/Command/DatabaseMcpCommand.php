@@ -68,7 +68,28 @@ class DatabaseMcpCommand extends Command
                         true,
                         false,
                         false
-                    )
+                    ),
+                    null,
+                    null,
+                    null,
+                    [
+                        'type' => 'object',
+                        'properties' => [
+                            'results' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'query' => ['type' => 'string', 'description' => 'The SQL query that was executed'],
+                                        'count' => ['type' => 'integer', 'description' => 'The number of rows returned by the query'],
+                                        'rows' => ['type' => 'array', 'description' => 'The rows returned by the query as an array of objects'],
+                                    ],
+                                    'required' => ['query', 'count', 'rows'],
+                                ],
+                            ],
+                        ],
+                        'required' => ['results'],
+                    ],
                 );
 
             $server = $builder->build();

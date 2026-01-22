@@ -9,5 +9,18 @@
       "text": "[\n    {\n        \"query\": \"SELECT 'It''s a test'\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"'It''s a test'\": \"It's a test\"\n            }\n        ]\n    }\n]"
     }
   ],
+  "structuredContent": {
+    "results": [
+      {
+        "query": "SELECT 'It''s a test'",
+        "count": 1,
+        "rows": [
+          {
+            "'It''s a test'": "It's a test"
+          }
+        ]
+      }
+    ]
+  },
   "isError": false
 }

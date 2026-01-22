@@ -9,5 +9,27 @@
       "text": "[\n    {\n        \"query\": \"SELECT '-- not a comment' as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": \"-- not a comment\"\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT '\\/* not a comment *\\/' as val2\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val2\": \"\\/* not a comment *\\/\"\n            }\n        ]\n    }\n]"
     }
   ],
+  "structuredContent": {
+    "results": [
+      {
+        "query": "SELECT '-- not a comment' as val",
+        "count": 1,
+        "rows": [
+          {
+            "val": "-- not a comment"
+          }
+        ]
+      },
+      {
+        "query": "SELECT '/* not a comment */' as val2",
+        "count": 1,
+        "rows": [
+          {
+            "val2": "/* not a comment */"
+          }
+        ]
+      }
+    ]
+  },
   "isError": false
 }
