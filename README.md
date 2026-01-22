@@ -65,4 +65,33 @@ To debug server you should use `npx @modelcontextprotocol/inspector`
 php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes ./bin/database-mcp
 ```
 
+## Security
+
+### Read-Only Enforcement
+
+This MCP server enforces **read-only mode** on all database connections through a **three-layer defense system**:
+
+1. **SQL Keyword Validation**: Blocks forbidden keywords (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`, `ALTER`, `TRUNCATE`, `EXEC`, `MERGE`, `GRANT`, etc.) before execution
+2. **Platform SET Commands**: Database-level read-only enforcement via session configuration:
+    - **MySQL/MariaDB**: `SET SESSION transaction_read_only = 1`
+    - **PostgreSQL**: `SET default_transaction_read_only = on`
+    - **SQLite**: `PRAGMA query_only = ON`
+    - **SQL Server**: `ApplicationIntent=ReadOnly` (see below)
+3. **Sandboxed Execution**: All queries execute within a transaction that is **always rolled back**, preventing any data modifications even if they bypass the first two layers
+
+### SQL Server Considerations
+
+**Important**: `ApplicationIntent=ReadOnly` only works for:
+
+- Always On Availability Groups (routing to read-only replicas)
+- Azure SQL Database
+
+For **standalone SQL Server instances**, you must configure a database user with **read-only permissions** at the infrastructure level. The SQL keyword validation and sandboxed execution layers provide additional protection, but cannot fully prevent all modifications without database-level permissions.
+
+Example connection string for Azure SQL or Always On:
+
+```bash
+sqlsrv://user:pass@host/database?ApplicationIntent=ReadOnly
+```
+
 ## Tools definitions and logic

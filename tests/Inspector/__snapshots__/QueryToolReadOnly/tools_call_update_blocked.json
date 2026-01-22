@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Error: Security violation: Keyword \"UPDATE\" is not allowed in read-only mode."
+    }
+  ],
+  "isError": true
+}

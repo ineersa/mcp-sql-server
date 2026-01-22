@@ -191,6 +191,9 @@ final class DoctrineConfigLoader
         $type = $this->extractDatabaseType($params);
         $version = $params['serverVersion'] ?? null;
 
+        // Add read-only middleware for all connections
+        $params['middlewares'] = [new \App\ReadOnly\ReadOnlyMiddleware()];
+
         try {
             $connection = DriverManager::getConnection($params);
 

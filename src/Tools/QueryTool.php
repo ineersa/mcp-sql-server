@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tools;
 
 use App\Service\DoctrineConfigLoader;
+use App\Service\SafeQueryExecutor;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
 
@@ -16,6 +17,7 @@ final class QueryTool
 
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
+        private SafeQueryExecutor $safeQueryExecutor,
     ) {
     }
 
@@ -34,8 +36,7 @@ final class QueryTool
             $conn = $this->doctrineConfigLoader->getConnection($connection);
 
             foreach ($queries as $singleQuery) {
-                $result = $conn->executeQuery($singleQuery);
-                $rows = $result->fetchAllAssociative();
+                $rows = $this->safeQueryExecutor->execute($conn, $singleQuery);
                 $count = \count($rows);
 
                 $results[] = [
@@ -46,7 +47,6 @@ final class QueryTool
             }
 
             $markdown = $this->formatResultsToMarkdown($results);
-            $structuredJson = json_encode($results, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
 
             return new CallToolResult(
                 content: [
