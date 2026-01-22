@@ -45,6 +45,87 @@ If you want to use other transports use some wrapper for now, for example, [MCPO
 uvx mcpo --port 8000 -- ~/dist/database-mcp
 ```
 
+## Docker
+
+The recommended way to run the MCP server is using Docker, which includes all necessary database drivers.
+
+### Building the Image
+
+```bash
+# Build the Docker image
+composer docker-build
+
+# Or rebuild without cache
+composer docker-rebuild
+
+# Or manually with docker
+docker build -t ineersa/database-mcp:latest .
+```
+
+### Running with Docker
+
+The container uses `--network host` to connect to databases running on the host or remote servers.
+
+#### Basic Example
+
+```bash
+docker run --rm -i --network host \
+    -e DATABASE_CONFIG_FILE=/config/databases.yaml \
+    -v /path/to/your/databases.yaml:/config/databases.yaml:ro \
+    ineersa/database-mcp:latest
+```
+
+#### With Individual DSN Environment Variables
+
+```bash
+docker run --rm -i --network host \
+    -e MYSQL_DSN="mysql://user:pass@localhost:3306/mydb?serverVersion=8.0&charset=utf8mb4" \
+    -e POSTGRES_DSN="postgres://user:pass@localhost:5432/mydb?serverVersion=16&charset=utf8" \
+    -v /path/to/your/databases.yaml:/config/databases.yaml:ro \
+    -e DATABASE_CONFIG_FILE=/config/databases.yaml \
+    ineersa/database-mcp:latest
+```
+
+### MCP Client Configuration (Docker)
+
+For MCP clients that support Docker containers:
+
+```json
+{
+    "database-server": {
+        "command": [
+            "docker",
+            "run",
+            "--rm",
+            "-i",
+            "--network",
+            "host",
+            "-e",
+            "DATABASE_CONFIG_FILE=/config/databases.yaml",
+            "-v",
+            "/path/to/databases.yaml:/config/databases.yaml:ro",
+            "ineersa/database-mcp:latest"
+        ]
+    }
+}
+```
+
+### Networking Considerations
+
+- **`--network host`**: Recommended for connecting to databases on localhost or local network. The container shares the host's network stack.
+- **Remote databases**: With `--network host`, remote database connections work normally using their hostnames/IPs.
+- **Docker databases**: If your database runs in Docker, use `--network host` or connect both containers to the same Docker network.
+
+### Environment Variables
+
+| Variable               | Default                 | Description                             |
+| ---------------------- | ----------------------- | --------------------------------------- |
+| `APP_ENV`              | `prod`                  | Application environment                 |
+| `APP_DEBUG`            | `false`                 | Enable debug mode                       |
+| `LOG_LEVEL`            | `warning`               | Log level (debug, info, warning, error) |
+| `APP_LOG_DIR`          | `/tmp/database-mcp/log` | Log directory                           |
+| `DATABASE_CONFIG_FILE` | **required**            | Path to database config file (mount it) |
+
 ## Development
 
 If you need to modify or want to run/debug a server locally, you should:

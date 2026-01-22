@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Resources;
 
 use App\Service\DoctrineConfigLoader;
+use Psr\Log\LoggerInterface;
 
 final class TableResource
 {
@@ -14,11 +15,22 @@ final class TableResource
 
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
+        private LoggerInterface $logger,
     ) {
     }
 
     public function __invoke(string $connection, string $table): string
     {
-        return $this->doctrineConfigLoader->getCreateTableSql($connection, $table);
+        try {
+            return $this->doctrineConfigLoader->getCreateTableSql($connection, $table);
+        } catch (\Throwable $e) {
+            $this->logger->error('Table resource read failed', [
+                'connection' => $connection,
+                'table' => $table,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 }

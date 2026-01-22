@@ -90,7 +90,9 @@
         "phpstan": "vendor/bin/phpstan analyse -c phpstan.dist.neon",
         "tests": "vendor/bin/phpunit --colors=always --testdox",
         "coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml",
-        "tests-xdebug": "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox"
+        "tests-xdebug": "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox",
+        "docker-build": "docker build -t ineersa/database-mcp:latest -t ineersa/database-mcp:0.0.2 .",
+        "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest -t ineersa/database-mcp:0.0.2 ."
     },
     "conflict": {
         "symfony/symfony": "*"

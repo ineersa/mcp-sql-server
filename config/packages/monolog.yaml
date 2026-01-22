@@ -14,7 +14,7 @@ when@dev:
                 action_level: info
                 handler: nested
                 buffer_size: 50
-                channels: [ "!event", "!deprecation", "!doctrine"]
+                channels: ["!event", "!deprecation", "!doctrine"]
             nested:
                 type: rotating_file
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
@@ -29,14 +29,13 @@ when@test:
                 type: fingers_crossed
                 action_level: error
                 handler: nested
-                channels: [ "!event", "!deprecation", "!doctrine" ]
+                channels: ["!event", "!deprecation", "!doctrine"]
             nested:
                 type: rotating_file
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
                 level: info
                 max_files: 1
                 formatter: monolog.formatter.json_with_stacktraces
-
 
 when@prod:
     monolog:
@@ -45,12 +44,11 @@ when@prod:
                 type: fingers_crossed
                 action_level: "%env(string:LOG_LEVEL)%"
                 handler: nested
-                buffer_size: 10
-                channels: [ "!event", "!deprecation", "!doctrine"]
+                buffer_size: 50
+                channels: ["!event", "!deprecation", "!doctrine"]
             nested:
                 type: rotating_file
                 path: "%env(string:APP_LOG_DIR)%/%kernel.environment%.log"
                 level: "%env(string:LOG_LEVEL)%"
                 max_files: 1
                 formatter: monolog.formatter.json_with_stacktraces
-

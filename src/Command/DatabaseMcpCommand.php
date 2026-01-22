@@ -94,9 +94,19 @@ class DatabaseMcpCommand extends Command
             foreach ($this->doctrineConfigLoader->getConnectionNames() as $connectionName) {
                 $builder->addResource(
                     function (string $uri) use ($connectionName): string {
-                        $resource = new ConnectionResource($this->doctrineConfigLoader);
+                        try {
+                            $resource = new ConnectionResource($this->doctrineConfigLoader);
 
-                        return $resource($connectionName);
+                            return $resource($connectionName);
+                        } catch (\Throwable $e) {
+                            $this->logger->error('Resource read failed', [
+                                'uri' => $uri,
+                                'connection' => $connectionName,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString(),
+                            ]);
+                            throw $e;
+                        }
                     },
                     "db://{$connectionName}",
                     $connectionName,

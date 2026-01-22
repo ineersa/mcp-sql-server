@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+
+# Development files
+.env.local
+.env.test
+.env.test.local
+.env.dev
+
+# Documentation
+*.md
+!README.md
+docs/
+plans/
+
+# Tests
+tests/
+phpunit.dist.xml
+.phpunit.cache/
+
+# Build artifacts
+coverage/
+dist/
+var/
+
+# Development tools
+.php-cs-fixer.cache
+.php-cs-fixer.dist.php
+phpstan.dist.neon
+
+# Agent/AI files
+.agent/
+AGENTS.md
+GEMINI.md
+opencode.json
+
+# Docker
+Dockerfile
+docker-compose.yaml
+.dockerignore
+
+# Misc
+LICENSE
+databases.test.yaml

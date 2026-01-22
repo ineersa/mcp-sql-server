@@ -8,6 +8,7 @@ use App\Service\DoctrineConfigLoader;
 use App\Service\SafeQueryExecutor;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
+use Psr\Log\LoggerInterface;
 
 final class QueryTool
 {
@@ -18,6 +19,7 @@ final class QueryTool
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
         private SafeQueryExecutor $safeQueryExecutor,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -56,6 +58,13 @@ final class QueryTool
                 structuredContent: ['results' => $results],
             );
         } catch (\Throwable $e) {
+            $this->logger->error('Query execution failed', [
+                'connection' => $connection,
+                'query' => $query,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             return new CallToolResult(
                 content: [
                     new TextContent(\sprintf('Error: %s', $e->getMessage())),
