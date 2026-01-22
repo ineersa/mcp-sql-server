@@ -1,0 +1,13 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "## Query 1\n```sql\nSELECT 1 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 1 |\n\n## Query 2\n```sql\nSELECT 2 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 2 |\n\n## Query 3\n```sql\nSELECT 3 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 3 |\n\n"
+    },
+    {
+      "type": "text",
+      "text": "[\n    {\n        \"query\": \"SELECT 1 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 1\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT 2 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 2\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT 3 as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": 3\n            }\n        ]\n    }\n]"
+    }
+  ],
+  "isError": false
+}

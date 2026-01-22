@@ -2,7 +2,11 @@
   "content": [
     {
       "type": "text",
-      "text": "[\n    {\n        \"id\": \"1\",\n        \"name\": \"Judy\",\n        \"email\": \"judy@example.com\"\n    },\n    {\n        \"id\": \"2\",\n        \"name\": \"Karl\",\n        \"email\": \"karl@example.com\"\n    },\n    {\n        \"id\": \"3\",\n        \"name\": \"Laura\",\n        \"email\": \"laura@example.com\"\n    }\n]"
+      "text": "## Query 1\n```sql\nSELECT * FROM users ORDER BY id\n```\n### Count\n3\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Judy | judy@example.com |\n| 2 | Karl | karl@example.com |\n| 3 | Laura | laura@example.com |\n\n"
+    },
+    {
+      "type": "text",
+      "text": "[\n    {\n        \"query\": \"SELECT * FROM users ORDER BY id\",\n        \"count\": 3,\n        \"rows\": [\n            {\n                \"id\": \"1\",\n                \"name\": \"Judy\",\n                \"email\": \"judy@example.com\"\n            },\n            {\n                \"id\": \"2\",\n                \"name\": \"Karl\",\n                \"email\": \"karl@example.com\"\n            },\n            {\n                \"id\": \"3\",\n                \"name\": \"Laura\",\n                \"email\": \"laura@example.com\"\n            }\n        ]\n    }\n]"
     }
   ],
   "isError": false

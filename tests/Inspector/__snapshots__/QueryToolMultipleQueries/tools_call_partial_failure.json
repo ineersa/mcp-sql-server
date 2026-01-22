@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Error: An exception occurred while executing a query: SQLSTATE[HY000]: General error: 1 no such table: non_existent_table"
+    }
+  ],
+  "isError": true
+}

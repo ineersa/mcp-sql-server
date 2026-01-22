@@ -1,0 +1,13 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "## Query 1\n```sql\nSELECT '-- not a comment' as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| -- not a comment |\n\n## Query 2\n```sql\nSELECT '/* not a comment */' as val2\n```\n### Count\n1\n\n### Rows\n| val2 |\n| --- |\n| /* not a comment */ |\n\n"
+    },
+    {
+      "type": "text",
+      "text": "[\n    {\n        \"query\": \"SELECT '-- not a comment' as val\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val\": \"-- not a comment\"\n            }\n        ]\n    },\n    {\n        \"query\": \"SELECT '\\/* not a comment *\\/' as val2\",\n        \"count\": 1,\n        \"rows\": [\n            {\n                \"val2\": \"\\/* not a comment *\\/\"\n            }\n        ]\n    }\n]"
+    }
+  ],
+  "isError": false
+}
