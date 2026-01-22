@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://server",
+      "mimeType": "text/plain",
+      "text": "products\nusers"
+    }
+  ]
+}

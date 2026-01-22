@@ -25,13 +25,12 @@ abstract class InspectorSnapshotTestCase extends TestCase
 
         $args = [
             'npx',
-            '-y', // Auto confirm install
+            '-y',
             $inspector,
             '--cli',
             ...$this->getServerConnectionArgs(),
         ];
 
-        // Add transport if not stdio (stdio is default)
         $transport = $this->getTransport();
         if ('stdio' !== $transport) {
             $args[] = '--transport';
@@ -78,6 +77,11 @@ abstract class InspectorSnapshotTestCase extends TestCase
             $args[] = $options['logLevel'] instanceof LoggingLevel ? $options['logLevel']->value : $options['logLevel'];
         }
 
+        if (isset($options['uri'])) {
+            $args[] = '--uri';
+            $args[] = $options['uri'];
+        }
+
         if (isset($options['envVars'])) {
             foreach ($options['envVars'] as $key => $value) {
                 $args[] = '-e';
@@ -86,7 +90,7 @@ abstract class InspectorSnapshotTestCase extends TestCase
         }
 
         $process = new Process(command: $args);
-        $process->setTimeout(60); // Give npx some time
+        $process->setTimeout(60);
 
         try {
             $process->mustRun();

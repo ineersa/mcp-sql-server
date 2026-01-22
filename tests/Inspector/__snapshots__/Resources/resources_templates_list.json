@@ -1,0 +1,10 @@
+{
+    "resourceTemplates": [
+        {
+            "name": "table",
+            "uriTemplate": "db://{connection}/{table}",
+            "description": "Database table schema (CREATE TABLE syntax). Use this to understand table structure before writing queries.",
+            "mimeType": "text/plain"
+        }
+    ]
+}

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Resources\ConnectionResource;
+use App\Resources\TableResource;
 use App\Service\ComposerMetadataExtractor;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
@@ -15,7 +17,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand(
@@ -41,9 +43,6 @@ class DatabaseMcpCommand extends Command
     {
     }
 
-    /**
-     * @param ConsoleOutput $output
-     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
@@ -92,6 +91,28 @@ class DatabaseMcpCommand extends Command
                     ],
                 );
 
+            foreach ($this->doctrineConfigLoader->getConnectionNames() as $connectionName) {
+                $builder->addResource(
+                    function (string $uri) use ($connectionName): string {
+                        $resource = new ConnectionResource($this->doctrineConfigLoader);
+
+                        return $resource($connectionName);
+                    },
+                    "db://{$connectionName}",
+                    $connectionName,
+                    ConnectionResource::DESCRIPTION,
+                    mimeType: 'text/plain',
+                );
+            }
+
+            $builder->addResourceTemplate(
+                TableResource::class,
+                TableResource::URI_TEMPLATE,
+                TableResource::NAME,
+                TableResource::DESCRIPTION,
+                mimeType: 'text/plain',
+            );
+
             $server = $builder->build();
 
             $transport = new \App\Transport\LoggingStdioTransport(
@@ -103,6 +124,7 @@ class DatabaseMcpCommand extends Command
             $this->logger->error($e->getMessage(), [
                 'trace' => $e->getTrace(),
             ]);
+            \assert($output instanceof ConsoleOutputInterface);
             $output->getErrorOutput()->writeln(json_encode([
                 'error' => $e->getMessage(),
             ]));

@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://users/users",
+      "mimeType": "text/plain",
+      "text": "CREATE TABLE users (id INT NOT NULL, name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, PRIMARY KEY (id));"
+    }
+  ]
+}

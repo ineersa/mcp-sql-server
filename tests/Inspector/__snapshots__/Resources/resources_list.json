@@ -1,0 +1,28 @@
+{
+  "resources": [
+    {
+      "name": "local",
+      "uri": "db://local",
+      "description": "List available tables in a database connection. Use this to discover tables before reading their schema.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "products",
+      "uri": "db://products",
+      "description": "List available tables in a database connection. Use this to discover tables before reading their schema.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "users",
+      "uri": "db://users",
+      "description": "List available tables in a database connection. Use this to discover tables before reading their schema.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "server",
+      "uri": "db://server",
+      "description": "List available tables in a database connection. Use this to discover tables before reading their schema.",
+      "mimeType": "text/plain"
+    }
+  ]
+}

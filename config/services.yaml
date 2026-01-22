@@ -23,6 +23,11 @@ services:
         resource: "../src/Tools"
         public: true
 
+    # Make ALL services in App\Resources\ public
+    App\Resources\:
+        resource: "../src/Resources"
+        public: true
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
     Psr\Container\ContainerInterface: "@service_container"

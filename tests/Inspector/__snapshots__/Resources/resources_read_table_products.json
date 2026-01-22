@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://products/users",
+      "mimeType": "text/plain",
+      "text": "CREATE TABLE users (id INT NOT NULL, name VARCHAR(255) CHARACTER SET utf8mb4 NOT NULL COLLATE `utf8mb4_0900_ai_ci`, email VARCHAR(255) CHARACTER SET utf8mb4 NOT NULL COLLATE `utf8mb4_0900_ai_ci`, PRIMARY KEY (id)) DEFAULT CHARACTER SET utf8mb4 COLLATE `utf8mb4_0900_ai_ci` ENGINE = InnoDB COMMENT = '' ;"
+    }
+  ]
+}
