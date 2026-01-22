@@ -12,7 +12,6 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
 
         $this->cleanupDatabase();
 
-        // Initialize all test databases with fixtures
         $this->initializeTestDatabases();
     }
 
@@ -31,7 +30,6 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
             'Tool Listing' => ['method' => 'tools/list'],
         ];
 
-        // Add query execution tests for each database
         foreach (['local', 'products', 'users', 'server'] as $connection) {
             $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
@@ -88,20 +86,14 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
         }
     }
 
-    /**
-     * Initialize all test databases with schema and fixtures.
-     */
     private function initializeTestDatabases(): void
     {
-        // Load the test database configuration
         $_ENV['DATABASE_CONFIG_FILE'] = \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2));
 
-        // Create DoctrineConfigLoader and load connections
         $logger = new \Psr\Log\NullLogger();
         $loader = new \App\Service\DoctrineConfigLoader($logger);
         $loader->loadAndValidate();
 
-        // Setup fixtures for all connections
         foreach ($loader->getAllConnections() as $name => $connection) {
             try {
                 \App\Tests\Fixtures\DatabaseFixtures::setup($connection);

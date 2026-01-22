@@ -19,9 +19,6 @@ final class DatabaseInitializer
     ) {
     }
 
-    /**
-     * Initialize all in-memory databases with test schema and fixtures.
-     */
     public function initializeTestDatabases(): void
     {
         foreach ($this->doctrineConfigLoader->getAllConnections() as $name => $connection) {
@@ -37,20 +34,16 @@ final class DatabaseInitializer
     {
         $params = $connection->getParams();
 
-        // Log params for debugging
         $this->logger->debug('Checking database params', ['params' => $params]);
 
-        // Check for explicit memory parameter
         if (isset($params['memory']) && true === $params['memory']) {
             return true;
         }
 
-        // Check for :memory: in path (SQLite in-memory)
         if (isset($params['path']) && ':memory:' === $params['path']) {
             return true;
         }
 
-        // Check for :memory: in url
         if (isset($params['url']) && str_contains($params['url'], ':memory:')) {
             return true;
         }

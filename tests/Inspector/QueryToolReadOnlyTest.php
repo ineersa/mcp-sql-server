@@ -12,7 +12,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
 
         $this->cleanupDatabase();
 
-        // Initialize all test databases with fixtures
         $this->initializeTestDatabases();
     }
 
@@ -29,7 +28,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
     {
         $tests = [];
 
-        // Test that SELECT queries work
         $tests['SELECT Query - local'] = [
             'method' => 'tools/call',
             'options' => [
@@ -45,7 +43,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
             'testName' => 'select_local',
         ];
 
-        // Test that INSERT is blocked
         $tests['INSERT Blocked - local'] = [
             'method' => 'tools/call',
             'options' => [
@@ -61,7 +58,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
             'testName' => 'insert_blocked',
         ];
 
-        // Test that UPDATE is blocked
         $tests['UPDATE Blocked - local'] = [
             'method' => 'tools/call',
             'options' => [
@@ -77,7 +73,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
             'testName' => 'update_blocked',
         ];
 
-        // Test that DELETE is blocked
         $tests['DELETE Blocked - local'] = [
             'method' => 'tools/call',
             'options' => [
@@ -93,7 +88,6 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
             'testName' => 'delete_blocked',
         ];
 
-        // Test that DROP is blocked
         $tests['DROP Blocked - local'] = [
             'method' => 'tools/call',
             'options' => [
@@ -148,20 +142,14 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
         }
     }
 
-    /**
-     * Initialize all test databases with schema and fixtures.
-     */
     private function initializeTestDatabases(): void
     {
-        // Load the test database configuration
         $_ENV['DATABASE_CONFIG_FILE'] = \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2));
 
-        // Create DoctrineConfigLoader and load connections
         $logger = new \Psr\Log\NullLogger();
         $loader = new \App\Service\DoctrineConfigLoader($logger);
         $loader->loadAndValidate();
 
-        // Setup fixtures for all connections
         foreach ($loader->getAllConnections() as $name => $connection) {
             try {
                 \App\Tests\Fixtures\DatabaseFixtures::setup($connection);

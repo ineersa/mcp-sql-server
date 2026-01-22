@@ -48,10 +48,8 @@ final class SafeQueryExecutor
      */
     public function execute(Connection $conn, string $sql): array
     {
-        // Layer 1: Validate SQL keywords
         $this->validateSql($sql);
 
-        // Layer 3: Sandboxed execution with rollback
         // This catches any "logic writes" (e.g., SELECT triggering side-effect functions)
         $conn->beginTransaction();
         try {
@@ -67,16 +65,8 @@ final class SafeQueryExecutor
         return $results;
     }
 
-    /**
-     * Validate that SQL does not contain forbidden keywords.
-     *
-     * @param string $sql The SQL query to validate
-     *
-     * @throws \RuntimeException If forbidden keywords are detected
-     */
     private function validateSql(string $sql): void
     {
-        // Normalize SQL for inspection (remove comments, extra whitespace)
         $sqlForInspection = $this->normalizeSql($sql);
 
         foreach (self::FORBIDDEN_KEYWORDS as $keyword) {
@@ -87,22 +77,12 @@ final class SafeQueryExecutor
         }
     }
 
-    /**
-     * Normalize SQL by removing comments and extra whitespace.
-     *
-     * @param string $sql The SQL query to normalize
-     *
-     * @return string Normalized SQL
-     */
     private function normalizeSql(string $sql): string
     {
-        // Remove single-line comments (-- ...)
         $sql = preg_replace('/--[^\n]*/', '', $sql) ?? $sql;
 
-        // Remove multi-line comments (/* ... */)
         $sql = preg_replace('/\/\*.*?\*\//s', '', $sql) ?? $sql;
 
-        // Collapse whitespace
         return preg_replace('/\s+/', ' ', $sql) ?? $sql;
     }
 }

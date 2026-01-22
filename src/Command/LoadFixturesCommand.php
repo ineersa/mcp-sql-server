@@ -76,7 +76,6 @@ final class LoadFixturesCommand extends Command
                 DatabaseFixtures::teardown($connection);
                 DatabaseFixtures::setup($connection);
 
-                // Detect database type from connection params
                 /** @var array{driver?: string, url?: string} $params */
                 $params = $connection->getParams();
                 $type = 'unknown';

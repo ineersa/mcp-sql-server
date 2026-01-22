@@ -41,7 +41,6 @@ abstract class InspectorSnapshotTestCase extends TestCase
         $args[] = '--method';
         $args[] = $method;
 
-        // Options for tools/call
         if (isset($options['toolName'])) {
             $args[] = '--tool-name';
             $args[] = $options['toolName'];
@@ -58,7 +57,6 @@ abstract class InspectorSnapshotTestCase extends TestCase
             }
         }
 
-        // Options for prompts/get
         if (isset($options['promptName'])) {
             $args[] = '--prompt-name';
             $args[] = $options['promptName'];
@@ -75,13 +73,11 @@ abstract class InspectorSnapshotTestCase extends TestCase
             }
         }
 
-        // Options for logging/setLevel
         if (isset($options['logLevel'])) {
             $args[] = '--log-level';
             $args[] = $options['logLevel'] instanceof LoggingLevel ? $options['logLevel']->value : $options['logLevel'];
         }
 
-        // Options for env variables
         if (isset($options['envVars'])) {
             foreach ($options['envVars'] as $key => $value) {
                 $args[] = '-e';
@@ -101,7 +97,6 @@ abstract class InspectorSnapshotTestCase extends TestCase
 
         $snapshotFile = $this->getSnapshotFilePath($method, $testName);
 
-        // Ensure directory exists
         $dir = \dirname($snapshotFile);
         if (!is_dir($dir)) {
             mkdir($dir, 0777, true);

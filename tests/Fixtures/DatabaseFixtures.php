@@ -8,18 +8,12 @@ use Doctrine\DBAL\Connection;
 
 final class DatabaseFixtures
 {
-    /**
-     * Setup schema and load fixtures in one call.
-     */
     public static function setup(Connection $connection): void
     {
         self::setupSchema($connection);
         self::loadFixtures($connection);
     }
 
-    /**
-     * Teardown database (drop tables).
-     */
     public static function teardown(Connection $connection): void
     {
         $type = self::detectDatabaseType($connection);
@@ -29,9 +23,6 @@ final class DatabaseFixtures
         $connection->executeStatement('DROP TABLE IF EXISTS users');
     }
 
-    /**
-     * Create the database schema (users and products tables).
-     */
     public static function setupSchema(Connection $connection): void
     {
         $type = self::detectDatabaseType($connection);
@@ -40,9 +31,6 @@ final class DatabaseFixtures
         self::createProductsTable($connection, $type);
     }
 
-    /**
-     * Load sample data into the database.
-     */
     public static function loadFixtures(Connection $connection): void
     {
         $type = self::detectDatabaseType($connection);
@@ -59,8 +47,6 @@ final class DatabaseFixtures
     }
 
     /**
-     * Get the expected user data for assertions.
-     *
      * @return array<int, array{id: int, name: string, email: string}>
      */
     public static function getExpectedUsers(string $type): array
@@ -91,8 +77,6 @@ final class DatabaseFixtures
     }
 
     /**
-     * Get the expected product data for assertions.
-     *
      * @return array<int, array{id: int, name: string, price: float}>
      */
     public static function getExpectedProducts(string $type): array
@@ -118,20 +102,15 @@ final class DatabaseFixtures
         };
     }
 
-    /**
-     * Detect the database type from the connection.
-     */
     private static function detectDatabaseType(Connection $connection): string
     {
         /** @var array{driver?: string, url?: string} $params */
         $params = $connection->getParams();
 
-        // Check for driver in params
         if (isset($params['driver']) && \is_string($params['driver'])) {
             return $params['driver'];
         }
 
-        // Check URL for driver type
         if (isset($params['url']) && \is_string($params['url'])) {
             if (str_starts_with($params['url'], 'mysql://') || str_starts_with($params['url'], 'pdo-mysql://')) {
                 return 'pdo_mysql';
@@ -150,9 +129,6 @@ final class DatabaseFixtures
         throw new \RuntimeException('Unable to detect database type from connection');
     }
 
-    /**
-     * Create the users table with database-specific SQL.
-     */
     private static function createUsersTable(Connection $connection, string $type): void
     {
         $sql = match ($type) {
@@ -190,9 +166,6 @@ final class DatabaseFixtures
         $connection->executeStatement($sql);
     }
 
-    /**
-     * Create the products table with database-specific SQL.
-     */
     private static function createProductsTable(Connection $connection, string $type): void
     {
         $sql = match ($type) {

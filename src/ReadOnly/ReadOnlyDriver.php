@@ -21,7 +21,6 @@ final class ReadOnlyDriver extends AbstractDriverMiddleware
     ): DriverConnection {
         $connection = parent::connect($params);
 
-        // Detect platform and execute appropriate read-only SET command
         $driver = $params['driver'] ?? '';
         $readOnlyQuery = $this->getReadOnlyQuery($driver);
 
@@ -37,13 +36,6 @@ final class ReadOnlyDriver extends AbstractDriverMiddleware
         return new ReadOnlyConnection($connection);
     }
 
-    /**
-     * Get the platform-specific read-only SQL command.
-     *
-     * @param string $driver The driver name
-     *
-     * @return string|null The SQL command to execute, or null if not applicable
-     */
     private function getReadOnlyQuery(string $driver): ?string
     {
         return match (true) {

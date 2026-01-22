@@ -73,11 +73,7 @@ final class DoctrineConfigLoader
         return $this->connections[$name]['version'] ?? null;
     }
 
-    /**
-     * Get all table names for a connection.
-     *
-     * @return string[]
-     */
+    /** @return string[] */
     public function getTableNames(string $connectionName): array
     {
         $connection = $this->getConnection($connectionName);
@@ -86,9 +82,6 @@ final class DoctrineConfigLoader
         return $schemaManager->listTableNames();
     }
 
-    /**
-     * Get CREATE TABLE syntax for a specific table.
-     */
     public function getCreateTableSql(string $connectionName, string $tableName): string
     {
         $connection = $this->getConnection($connectionName);
@@ -215,7 +208,9 @@ final class DoctrineConfigLoader
         }
     }
 
-    /** @param mixed[] $config
+    /**
+     * @param mixed[] $config
+     *
      * @return array<string, mixed>
      */
     private function extractConnectionParams(array $config): array
@@ -245,7 +240,6 @@ final class DoctrineConfigLoader
         }
 
         // Always allow explicit overrides or fallback to standard components
-        // Merge config params over URL params
         $keys = ['host', 'port', 'dbname', 'user', 'password', 'driver', 'memory', 'path', 'applicationIntent', 'encrypt', 'trustServerCertificate', 'driverOptions'];
         foreach ($keys as $key) {
             if (isset($config[$key])) {
@@ -253,7 +247,6 @@ final class DoctrineConfigLoader
             }
         }
 
-        // Handle version/serverVersion alias
         if (isset($config['version'])) {
             $params['serverVersion'] = $config['version'];
         } elseif (isset($config['serverVersion'])) {
@@ -284,7 +277,9 @@ final class DoctrineConfigLoader
         return 'unknown';
     }
 
-    /** @param mixed[] $data
+    /**
+     * @param array<string, mixed> $data
+     *
      * @return array<string, mixed>
      */
     private function resolveEnvVars(array $data): array

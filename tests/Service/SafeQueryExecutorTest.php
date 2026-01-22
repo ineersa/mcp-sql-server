@@ -18,9 +18,6 @@ final class SafeQueryExecutorTest extends TestCase
         $this->executor = new SafeQueryExecutor();
     }
 
-    /**
-     * @dataProvider forbiddenKeywordsProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('forbiddenKeywordsProvider')]
     public function testBlocksForbiddenKeywords(string $sql, string $expectedKeyword): void
     {

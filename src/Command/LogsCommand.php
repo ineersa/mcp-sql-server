@@ -63,7 +63,6 @@ class LogsCommand extends Command
             return Command::SUCCESS;
         }
 
-        // Build list of decoded entries from the end (newest first)
         $entries = [];
         for ($i = \count($lines) - 1; $i >= 0 && \count($entries) < $limit; --$i) {
             $line = $lines[$i];
@@ -73,7 +72,6 @@ class LogsCommand extends Command
             }
         }
 
-        // If ID is provided, pretty print that specific entry
         $idOption = $input->getOption('id');
         if (null !== $idOption) {
             $id = (int) $idOption;
@@ -89,7 +87,6 @@ class LogsCommand extends Command
             return Command::SUCCESS;
         }
 
-        // Otherwise show table of recent entries
         $rows = [];
         foreach ($entries as $idx => $entry) {
             $id = $idx + 1;

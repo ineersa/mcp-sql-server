@@ -244,16 +244,12 @@ final class QueryTool
             return '';
         }
 
-        // Get headers from first row
         $headers = array_keys($rows[0]);
 
-        // Header row
         $table = '| '.implode(' | ', $headers)." |\n";
 
-        // Separator row
         $table .= '| '.implode(' | ', array_map(fn () => '---', $headers))." |\n";
 
-        // Data rows
         foreach ($rows as $row) {
             $table .= '| '.implode(' | ', array_map(function ($val) {
                 if (null === $val) {
