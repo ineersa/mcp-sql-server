@@ -316,6 +316,10 @@ config/             # Symfony configuration
 
 ---
 
+## Plans
+
+- PII guard for data
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
