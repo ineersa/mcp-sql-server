@@ -48,3 +48,4 @@ docker-compose.yaml
 # Misc
 LICENSE
 databases.test.yaml
+src/Commands/LoadFixturesCommand.php

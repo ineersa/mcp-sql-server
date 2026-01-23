@@ -20,7 +20,12 @@ class LoggingStdioTransport extends StdioTransport
 
     public function send(string $data, array $context): void
     {
-        $this->logger->info('Sending immediate response', ['data' => $data, 'context' => $context]);
+        $decoded = json_decode($data, true);
+        if (\JSON_ERROR_NONE === json_last_error()) {
+            $this->logger->info('Sending immediate response', ['message' => $decoded]);
+        } else {
+            $this->logger->info('Sending immediate response', ['message' => $data]);
+        }
         parent::send($data, $context);
     }
 
@@ -29,7 +34,12 @@ class LoggingStdioTransport extends StdioTransport
         $messages = parent::getOutgoingMessages($sessionId);
 
         foreach ($messages as $message) {
-            $this->logger->info('Sending queued response', ['message' => $message]);
+            $decoded = json_decode($message['message'], true);
+            if (\JSON_ERROR_NONE === json_last_error()) {
+                $this->logger->info('Sending queued response', ['message' => $decoded]);
+            } else {
+                $this->logger->info('Sending queued response', ['message' => $message['message']]);
+            }
         }
 
         return $messages;

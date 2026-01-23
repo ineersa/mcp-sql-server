@@ -29,7 +29,7 @@ class LogsCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('id', null, InputOption::VALUE_REQUIRED, 'Log id from the last listing to pretty print')
+            ->addOption('id', null, InputOption::VALUE_REQUIRED, 'Log line number to pretty print')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'How many latest log rows to show', '100')
         ;
     }
@@ -56,52 +56,70 @@ class LogsCommand extends Command
             return Command::FAILURE;
         }
 
-        $lines = @file($logFile, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES) ?: [];
+        // We use FILE_IGNORE_NEW_LINES but keep empty lines to maintain line number mapping
+        $lines = @file($logFile, \FILE_IGNORE_NEW_LINES) ?: [];
         if ([] === $lines) {
             $io->note(\sprintf('Log file "%s" is empty.', $logFile));
 
             return Command::SUCCESS;
         }
 
-        $entries = [];
-        for ($i = \count($lines) - 1; $i >= 0 && \count($entries) < $limit; --$i) {
-            $line = $lines[$i];
-            $data = json_decode($line, true);
-            if (\is_array($data)) {
-                $entries[] = $data;
-            }
-        }
-
         $idOption = $input->getOption('id');
         if (null !== $idOption) {
             $id = (int) $idOption;
-            if ($id < 1 || $id > \count($entries)) {
-                $io->error(\sprintf('Invalid id %d. Valid range is 1..%d (based on latest %d entries).', $id, \count($entries), $limit));
+            if ($id < 1 || $id > \count($lines)) {
+                $io->error(\sprintf('Invalid id %d. Valid range is 1..%d.', $id, \count($lines)));
 
                 return Command::INVALID;
             }
 
-            $entry = $entries[$id - 1]; // 1 is most recent
+            $line = $lines[$id - 1];
+            $entry = json_decode($line, true);
+            if (!\is_array($entry)) {
+                $io->error(\sprintf('Line %d is not a valid JSON log entry.', $id));
+                $io->text($line);
+
+                return Command::FAILURE;
+            }
+
             $this->renderSingleEntry($io, $entry, $id, $logFile);
 
             return Command::SUCCESS;
         }
 
         $rows = [];
-        foreach ($entries as $idx => $entry) {
-            $id = $idx + 1;
-            $rows[] = [
-                (string) $id,
-                $this->stringify($entry['message'] ?? ''),
-                (string) ($entry['channel'] ?? ''),
-                (string) ($entry['level_name'] ?? ($entry['level'] ?? '')),
-                (string) ($entry['datetime'] ?? ''),
-            ];
+        $count = 0;
+        // Iterate backwards from the end of the file
+        for ($i = \count($lines) - 1; $i >= 0 && $count < $limit; --$i) {
+            $line = $lines[$i];
+            // Skip empty lines or decode errors, but ID logic uses original line number ($i + 1)
+            if ('' === trim($line)) {
+                continue;
+            }
+
+            $entry = json_decode($line, true);
+            if (\is_array($entry)) {
+                $id = $i + 1;
+                $levelName = (string) ($entry['level_name'] ?? ($entry['level'] ?? ''));
+                $message = $this->stringify($entry['message'] ?? '');
+                if ($contextPreview = $this->getContextPreview($entry['context'] ?? [])) {
+                    $message .= "\n<fg=gray>".$contextPreview.'</>';
+                }
+
+                $rows[] = [
+                    (string) $id,
+                    $message,
+                    (string) ($entry['channel'] ?? ''),
+                    $this->getStyledLevelName($levelName),
+                    (string) ($entry['datetime'] ?? ''),
+                ];
+                ++$count;
+            }
         }
 
         $io->title('Latest logs from '.$logFile);
         $io->table(['id', 'message', 'channel', 'level_name', 'datetime'], $rows);
-        $io->writeln(\sprintf('Showing %d of %d lines; most recent first. Use --id=<n> to view details.', \count($entries), \count($lines)));
+        $io->writeln(\sprintf('Showing %d of %d lines; most recent first. Use --id=<line> to view details.', $count, \count($lines)));
 
         return Command::SUCCESS;
     }
@@ -168,5 +186,46 @@ class LogsCommand extends Command
     private function prettyJson(mixed $value): string
     {
         return json_encode($value, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE) ?: '';
+    }
+
+    private function getStyledLevelName(string $levelName): string
+    {
+        $levelName = strtoupper($levelName);
+
+        return match ($levelName) {
+            'INFO' => \sprintf('<info>%s</info>', $levelName),
+            'WARNING' => \sprintf('<comment>%s</comment>', $levelName),
+            'ERROR', 'CRITICAL', 'ALERT', 'EMERGENCY' => \sprintf('<error>%s</error>', $levelName),
+            'DEBUG' => \sprintf('<fg=gray>%s</>', $levelName),
+            'NOTICE' => \sprintf('<fg=blue>%s</>', $levelName),
+            default => $levelName,
+        };
+    }
+
+    /**
+     * @param array<mixed> $context
+     */
+    private function getContextPreview(array $context): string
+    {
+        if ([] === $context) {
+            return '';
+        }
+
+        $lines = [];
+        $count = 0;
+        foreach ($context as $key => $value) {
+            if ($count >= 3) {
+                $lines[] = '...';
+                break;
+            }
+            $valStr = \is_scalar($value) ? (string) $value : json_encode($value);
+            if (\strlen($valStr) > 50) {
+                $valStr = substr($valStr, 0, 47).'...';
+            }
+            $lines[] = \sprintf('%s: %s', $key, $valStr);
+            ++$count;
+        }
+
+        return implode("\n", $lines);
     }
 }
