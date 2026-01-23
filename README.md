@@ -1,107 +1,114 @@
-# MCP SQL Server
+# Database MCP Server
 
-PHP/Symfony implementation of a simple MCP server to access database and execute queries.
+A PHP/Symfony implementation of a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for executing **read-only** SQL queries against multiple databases.
 
-## Installing and running MCP
+## Configuration
 
-To generate binary run `./prepare_binary.sh`, it should work on Linux.
+### Environment Variables
 
-To build binary, you have to install [box-project/box](https://github.com/box-project/box/blob/main/doc/installation.md#composer)
-to generate PHAR.
+| Variable               | Default                 | Description                                    |
+| ---------------------- | ----------------------- | ---------------------------------------------- |
+| `DATABASE_CONFIG_FILE` | **required**            | Path to the database configuration YAML file   |
+| `APP_ENV`              | `prod`                  | Application environment                        |
+| `APP_DEBUG`            | `false`                 | Enable debug mode                              |
+| `LOG_LEVEL`            | `warning`               | Log level: `debug`, `info`, `warning`, `error` |
+| `APP_LOG_DIR`          | `/tmp/database-mcp/log` | Directory for log files                        |
 
-Thanks to amazing projects like [Static PHP](https://static-php.dev/en/) and [FrankenPHP](https://frankenphp.dev/docs/embed/) we are able to run PHP applications as a single binary now.
+### Database Configuration File
 
-The easiest way is to just download binary from releases for your platform.
+Database connections are defined in a YAML file.
 
-## Env variables
+The file path is specified via the `DATABASE_CONFIG_FILE` environment variable.
 
-```dotenv
-### Set log level, default INFO, with log action level ERROR
-LOG_LEVEL=info
-# Where to store logs
-APP_LOG_DIR="/tmp/mcp/database-mcp/log"
+File configuration follows `doctrine.yaml` Doctrine configuration standarts and supports DSN and environment variables injection.
+
+#### Multiple Named Connections
+
+```yaml
+doctrine:
+    dbal:
+        connections:
+            production:
+                url: "mysql://user:pass@localhost:3306/mydb?serverVersion=8.0&charset=utf8mb4"
+            analytics:
+                driver: "pdo_pgsql"
+                host: "postgres.local"
+                dbname: "analytics"
+                user: "analyst"
+                password: "%env(MY_PASSWORD)%"
+                serverVersion: "16"
 ```
 
-## MCP config
+#### Supported Database Drivers
 
-**STDIO** is only supported transport for now, just add entry to `mcp.json` with a path to binary
+| Database      | Driver       | URL Scheme                |
+| ------------- | ------------ | ------------------------- |
+| MySQL/MariaDB | `pdo_mysql`  | `mysql://`, `mysql2://`   |
+| PostgreSQL    | `pdo_pgsql`  | `postgres://`, `pgsql://` |
+| SQLite        | `pdo_sqlite` | `sqlite://`               |
+| SQL Server    | `pdo_sqlsrv` | `sqlsrv://`, `mssql://`   |
 
-```json
-{
-    "command": "./dist/database-mcp",
-    "args": [],
-    "env": {
-        "APP_LOG_DIR": "/tmp/.symfony/database-mcp/log"
-    }
-}
-```
+---
 
-You can also use `database-mcp.phar` PHAR file.
-The server exposes tools: `database.query`.
+## Running the MCP Server
 
-If you want to use other transports use some wrapper for now, for example, [MCPO](https://github.com/open-webui/mcpo)
+### Docker (Recommended)
 
-```bash
-uvx mcpo --port 8000 -- ~/dist/database-mcp
-```
+The Docker image includes all database drivers and is the easiest way to run the server.
 
-## Docker
-
-The recommended way to run the MCP server is using Docker, which includes all necessary database drivers.
-
-### Building the Image
-
-```bash
-# Build the Docker image
-composer docker-build
-
-# Or rebuild without cache
-composer docker-rebuild
-
-# Or manually with docker
-docker build -t ineersa/database-mcp:latest .
-```
-
-### Running with Docker
-
-The container uses `--network host` to connect to databases running on the host or remote servers.
-
-#### Basic Example
+#### Usage
 
 ```bash
 docker run --rm -i --network host \
     -e DATABASE_CONFIG_FILE=/config/databases.yaml \
-    -v /path/to/your/databases.yaml:/config/databases.yaml:ro \
+    -e LOG_LEVEL=info \
+    -e APP_LOG_DIR=/tmp/logs \
+    -v /path/to/databases.yaml:/config/databases.yaml:ro \
+    -v /tmp/logs:/tmp/logs \
     ineersa/database-mcp:latest
 ```
 
-#### With Individual DSN Environment Variables
+#### Viewing Logs
+
+To view logs from the Docker container, mount the log directory:
 
 ```bash
-docker run --rm -i --network host \
-    -e MYSQL_DSN="mysql://user:pass@localhost:3306/mydb?serverVersion=8.0&charset=utf8mb4" \
-    -e POSTGRES_DSN="postgres://user:pass@localhost:5432/mydb?serverVersion=16&charset=utf8" \
-    -v /path/to/your/databases.yaml:/config/databases.yaml:ro \
-    -e DATABASE_CONFIG_FILE=/config/databases.yaml \
-    ineersa/database-mcp:latest
+docker run --rm -it \
+    -v /tmp/database-mcp/log:/tmp/database-mcp/log:ro \
+    --entrypoint php \
+    ineersa/database-mcp:latest \
+    /app/bin/console app:logs
 ```
 
-### MCP Client Configuration (Docker)
+### Without Docker
 
-For MCP clients that support Docker containers:
+If you have PHP 8.4+ installed with the required database extensions:
+
+1. Clone the repository: `git clone https://github.com/ineersa/database-mcp.git`
+2. Install dependencies: `composer install --no-dev`
+3. Create your `databases.yaml` configuration file
+4. Run the server:
+
+```bash
+DATABASE_CONFIG_FILE=./databases.yaml ./bin/database-mcp
+```
+
+### MCP Client Configuration
+
+Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop settings):
 
 ```json
 {
     "database-server": {
-        "command": [
-            "docker",
+        "command": "docker",
+        "args": [
             "run",
             "--rm",
             "-i",
             "--network",
             "host",
-            "-e",
-            "DATABASE_CONFIG_FILE=/config/databases.yaml",
+            "--env-file",
+            "/path/to/database-mcp.env",
             "-v",
             "/path/to/databases.yaml:/config/databases.yaml:ro",
             "ineersa/database-mcp:latest"
@@ -110,47 +117,41 @@ For MCP clients that support Docker containers:
 }
 ```
 
+Example `database-mcp.env` file:
+
+```env
+DATABASE_CONFIG_FILE=/config/databases.yaml
+LOG_LEVEL=warning
+APP_LOG_DIR=/tmp/database-mcp/log
+```
+
+For the local command:
+
+```json
+{
+    "database": {
+        "command": "/path/to/bin/database-mcp",
+        "args": [],
+        "env": {
+            "DATABASE_CONFIG_FILE": "/path/to/databases.yaml",
+            "LOG_LEVEL": "info",
+            "APP_LOG_DIR": "/tmp/database-mcp/log"
+        }
+    }
+}
+```
+
 ### Networking Considerations
 
-- **`--network host`**: Recommended for connecting to databases on localhost or local network. The container shares the host's network stack.
-- **Remote databases**: With `--network host`, remote database connections work normally using their hostnames/IPs.
-- **Docker databases**: If your database runs in Docker, use `--network host` or connect both containers to the same Docker network.
+- **`--network host`**: Recommended for connecting to databases. The container shares the host's network stack and remote database connections work normally using their hostnames/IPs.
 
-### Environment Variables
-
-| Variable               | Default                 | Description                             |
-| ---------------------- | ----------------------- | --------------------------------------- |
-| `APP_ENV`              | `prod`                  | Application environment                 |
-| `APP_DEBUG`            | `false`                 | Enable debug mode                       |
-| `LOG_LEVEL`            | `warning`               | Log level (debug, info, warning, error) |
-| `APP_LOG_DIR`          | `/tmp/database-mcp/log` | Log directory                           |
-| `DATABASE_CONFIG_FILE` | **required**            | Path to database config file (mount it) |
-
-## Development
-
-If you need to modify or want to run/debug a server locally, you should:
-
-- `git clone` repository
-- run `composer install`
-- `./bin/database-mcp` contains server, while `./bin/console` holds Symfony console
-
-To debug server you should use `npx @modelcontextprotocol/inspector`
-
-- Lint/format: `composer cs-fix`
-- Static analysis: `composer phpstan`
-- Tests: `composer tests`
-
-### Debug
-
-```bash
-php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes ./bin/database-mcp
-```
+---
 
 ## Security
 
 ### Read-Only Enforcement
 
-This MCP server enforces **read-only mode** on all database connections through a **three-layer defense system**:
+This MCP server enforces **read-only mode** on all database connections through:
 
 1. **SQL Keyword Validation**: Blocks forbidden keywords (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`, `ALTER`, `TRUNCATE`, `EXEC`, `MERGE`, `GRANT`, etc.) before execution
 2. **Platform SET Commands**: Database-level read-only enforcement via session configuration:
@@ -158,7 +159,9 @@ This MCP server enforces **read-only mode** on all database connections through 
     - **PostgreSQL**: `SET default_transaction_read_only = on`
     - **SQLite**: `PRAGMA query_only = ON`
     - **SQL Server**: `ApplicationIntent=ReadOnly` (see below)
-3. **Sandboxed Execution**: All queries execute within a transaction that is **always rolled back**, preventing any data modifications even if they bypass the first two layers
+3. **Sandboxed Execution**: All queries execute within a transaction that is **always rolled back**, preventing any data modifications
+
+> **NOTE** It's always safer to just use read only permissions for database user, even with protection layer
 
 ### SQL Server Considerations
 
@@ -169,10 +172,150 @@ This MCP server enforces **read-only mode** on all database connections through 
 
 For **standalone SQL Server instances**, you must configure a database user with **read-only permissions** at the infrastructure level. The SQL keyword validation and sandboxed execution layers provide additional protection, but cannot fully prevent all modifications without database-level permissions.
 
-Example connection string for Azure SQL or Always On:
+---
 
-```bash
-sqlsrv://user:pass@host/database?ApplicationIntent=ReadOnly
+## Tools
+
+The server exposes the following MCP tools:
+
+### `query`
+
+Executes read-only SQL queries against a specified database connection.
+
+**Parameters:**
+
+| Parameter    | Type   | Required | Description                                                     |
+| ------------ | ------ | -------- | --------------------------------------------------------------- |
+| `connection` | string | Yes      | Name of the database connection to use                          |
+| `query`      | string | Yes      | SQL query to execute (semicolon-separated for multiple queries) |
+
+**Behavior:**
+
+- Only `SELECT` and other read-only operations are allowed
+- Multiple queries can be executed if separated by semicolons
+- Results are returned in two formats:
+    - **Markdown**: Human-readable tables with row counts (in `content`)
+    - **Structured JSON**: Machine-readable data with schema (in `structuredContent`)
+- By default, queries should include `LIMIT 50` unless full data is needed
+- The tool dynamically lists available connections and their database types/versions
+
+**Example Request:**
+
+```json
+{
+    "name": "query",
+    "arguments": {
+        "connection": "production",
+        "query": "SELECT id, name, email FROM users LIMIT 10"
+    }
+}
 ```
 
-## Tools definitions and logic
+**Example Response:**
+
+```markdown
+## Query 1
+
+​`sql
+SELECT id, name, email FROM users LIMIT 10
+​`
+
+### Count
+
+10
+
+### Rows
+
+| id  | name  | email             |
+| --- | ----- | ----------------- |
+| 1   | Alice | alice@example.com |
+| 2   | Bob   | bob@example.com   |
+
+...
+```
+
+---
+
+## Development
+
+### Setup
+
+```bash
+git clone https://github.com/ineersa/database-mcp.git
+cd database-mcp
+composer install
+```
+
+### Running Locally
+
+Use the MCP Inspector to test the server:
+
+```bash
+npx @modelcontextprotocol/inspector ./bin/database-mcp
+```
+
+Or use the Symfony console for other commands
+
+```bash
+./bin/console
+```
+
+### Code Quality
+
+```bash
+composer cs-fix
+composer phpstan
+composer tests
+```
+
+With Xdebug:
+
+```bash
+composer tests-xdebug
+```
+
+### Logs command
+
+The server writes JSON logs to `APP_LOG_DIR`. Use the built-in command to view them:
+
+```bash
+# List recent logs
+./bin/console app:logs
+
+# View a specific log entry by line number
+./bin/console app:logs --id=42
+
+# Limit the number of entries shown
+./bin/console app:logs --limit=50
+```
+
+### Building Docker Image
+
+```bash
+# Build the image
+composer docker-build
+
+# Or rebuild without cache
+composer docker-rebuild
+
+# Or manually
+docker build -t ineersa/database-mcp:latest .
+```
+
+### Project Structure
+
+```
+src/
+├── Command/        # Symfony console commands (app:logs, etc.)
+├── ReadOnly/       # DBAL middleware for read-only enforcement
+├── Service/        # Core services (DoctrineConfigLoader, SafeQueryExecutor)
+└── Tools/          # MCP tool implementations
+tests/              # PHPUnit test suites
+config/             # Symfony configuration
+```
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

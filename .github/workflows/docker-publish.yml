@@ -7,7 +7,6 @@ on:
 
 env:
   REGISTRY: docker.io
-  # This is the image name on Docker Hub
   IMAGE_NAME: ineersa/database-mcp
 
 jobs:
