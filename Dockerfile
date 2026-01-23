@@ -84,6 +84,10 @@ WORKDIR /app
 # Copy composer files first for better layer caching
 COPY composer.json composer.lock symfony.lock ./
 
+# Set production environment BEFORE running composer scripts
+# This ensures cache:clear knows not to load dev bundles like MakerBundle
+ENV APP_ENV=prod
+
 # Install dependencies without dev packages
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
@@ -95,9 +99,6 @@ RUN composer dump-autoload --optimize --classmap-authoritative
 
 # Create log directory
 RUN mkdir -p /tmp/database-mcp/log
-
-# Set production environment (other settings loaded from .env.prod)
-ENV APP_ENV=prod
 
 # The entrypoint is the MCP server
 ENTRYPOINT ["php", "/app/bin/database-mcp"]

@@ -1,7 +1,7 @@
 {
     "name": "ineersa/database-mcp",
     "description": "MCP server implementation to work with SQL databases",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "type": "project",
     "license": "MIT",
     "authors": [
@@ -91,8 +91,8 @@
         "tests": "vendor/bin/phpunit --colors=always --testdox",
         "coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml",
         "tests-xdebug": "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox",
-        "docker-build": "docker build -t ineersa/database-mcp:latest -t ineersa/database-mcp:0.0.2 .",
-        "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest -t ineersa/database-mcp:0.0.2 ."
+        "docker-build": "docker build -t ineersa/database-mcp:latest .",
+        "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest ."
     },
     "conflict": {
         "symfony/symfony": "*"
