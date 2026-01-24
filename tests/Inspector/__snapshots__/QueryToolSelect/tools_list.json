@@ -1,56 +1,65 @@
 {
-    "tools": [
-        {
-            "name": "query",
-            "description": "Runs read-only SQL queries against chosen database connection. Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security. Multiple queries can be executed if separated by semicolons. When selecting data, always default to limiting the results to 50 records (e.g., LIMIT 50) unless it is necessary to retrieve the full dataset.\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "connection": {
-                        "type": "string",
-                        "description": "the name of the database connection to use"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "The SQL query (or queries) to execute. Multiple queries must be separated by semicolons."
-                    }
+  "tools": [
+    {
+      "name": "query",
+      "description": "Runs read-only SQL queries against chosen database connection. Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security. Multiple queries can be executed if separated by semicolons.\n\nWhen selecting data, always default to limiting the results to 10 records (e.g., LIMIT 10 or TOP 10) unless the user explicitly asks for more.\n\nIf you need the total count of records, use a separate query like:\nSELECT COUNT(*) FROM table;\nSELECT * FROM table LIMIT 10;\nAvailable connections:\n - local : SQLite, version 3.45.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16\n - server : SQL Server, version 2019",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "description": "the name of the database connection to use"
+          },
+          "query": {
+            "type": "string",
+            "description": "The SQL query (or queries) to execute. Multiple queries must be separated by semicolons."
+          }
+        },
+        "required": [
+          "connection",
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "The SQL query that was executed"
                 },
-                "required": ["connection", "query"]
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "The SQL query that was executed"
-                                },
-                                "count": {
-                                    "type": "integer",
-                                    "description": "The number of rows returned by the query"
-                                },
-                                "rows": {
-                                    "type": "array",
-                                    "description": "The rows returned by the query as an array of objects"
-                                }
-                            },
-                            "required": ["query", "count", "rows"]
-                        }
-                    }
+                "count": {
+                  "type": "integer",
+                  "description": "The number of rows returned by the query"
                 },
-                "required": ["results"]
-            },
-            "annotations": {
-                "title": "Query database",
-                "readOnlyHint": true,
-                "destructiveHint": true,
-                "idempotentHint": false,
-                "openWorldHint": false
+                "rows": {
+                  "type": "array",
+                  "description": "The rows returned by the query as an array of objects"
+                }
+              },
+              "required": [
+                "query",
+                "count",
+                "rows"
+              ]
             }
-        }
-    ]
+          }
+        },
+        "required": [
+          "results"
+        ]
+      },
+      "annotations": {
+        "title": "Query database",
+        "readOnlyHint": true,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    }
+  ]
 }
