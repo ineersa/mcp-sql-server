@@ -84,10 +84,10 @@ The Docker image includes all database drivers and is the easiest way to run the
 
 #### Quick Start with Docker Compose
 
-1. **Copy the example configuration:**
+1. **Download the example configuration:**
 
 ```bash
-cp docker-compose.example.yaml docker-compose.yaml
+wget https://raw.githubusercontent.com/ineersa/mcp-sql-server/refs/heads/main/docker-compose.example.yaml -O docker-compose.yaml
 ```
 
 2. **Create your `databases.yaml` configuration file** (see Configuration section above)
@@ -136,11 +136,6 @@ If you have PHP 8.4+ installed with the required database extensions:
 1. Clone the repository: `git clone https://github.com/ineersa/database-mcp.git`
 2. Install dependencies: `composer install --no-dev`
 3. Create your `databases.yaml` configuration file
-4. Run the server:
-
-```bash
-DATABASE_CONFIG_FILE=./databases.yaml ./bin/database-mcp
-```
 
 ### MCP Client Configuration
 
