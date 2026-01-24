@@ -129,6 +129,16 @@ The example `docker-compose.yaml` is pre-configured with:
 - Interactive stdin/tty for MCP protocol communication
 - A dedicated log viewer service
 
+#### Updating to the Latest Version
+
+To update to the latest version of the MCP server Docker image:
+
+```bash
+docker compose pull
+```
+
+This will download the newest version. The updated image will be used the next time your MCP client starts the server.
+
 ### Without Docker
 
 If you have PHP 8.4+ installed with the required database extensions:
