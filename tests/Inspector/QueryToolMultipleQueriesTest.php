@@ -31,7 +31,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => 'SELECT * FROM users WHERE id = 1; SELECT count(*) as count FROM users LIMIT 1',
+                        'query' => 'SELECT * FROM users WHERE id = 1; SELECT count(*) as count FROM users',
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),

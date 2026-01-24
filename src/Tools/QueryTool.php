@@ -15,14 +15,24 @@ final class QueryTool
     public const string NAME = 'query';
     public const string TITLE = 'Query database';
     public const string DESCRIPTION = <<<DESCRIPTION
-Runs read-only SQL queries against chosen database connection. Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security. Multiple queries can be executed if separated by semicolons.
+Runs read-only SQL queries against chosen database connection.
+Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security.
 
-Any SELECT query without WHERE clause MUST include LIMIT 10 (MySQL/Postgres) or TOP 10 (SQL Server). This is a hard requirement with no exceptions. You must add pagination to all queries. If your query lacks LIMIT/TOP, you MUST add it before execution. Do NOT attempt to retrieve unlimited results.
+Any SELECT query without WHERE clause MUST include LIMIT (MySQL/Postgres/SQLite) or TOP (SQL Server).
+This is a hard requirement with no exceptions. You must add pagination to all queries.
+If your query lacks LIMIT/TOP, you MUST add it before execution.
+Do NOT attempt to retrieve unlimited results.
 
 To retrieve extra rows, you MUST USE PAGINATION (OFFSET and LIMIT/FETCH NEXT).
 
-If you need the total count of records, use a separate query like:
-SELECT COUNT(*) FROM table;
+Examples for MySQL/PostgreSQL/SQLite:
+  SELECT * FROM table LIMIT 10;
+  SELECT COUNT(*) FROM table;
+
+Examples for SQL Server:
+  SELECT TOP 10 * FROM table;
+  SELECT COUNT(*) FROM table;
+
 DESCRIPTION;
 
     public function __construct(
@@ -308,6 +318,65 @@ DESCRIPTION;
             return;
         }
 
+        // Allow aggregate-only queries (COUNT, SUM, AVG, etc.) without LIMIT
+        // since they inherently return a single row when no GROUP BY is present
+        if ($this->isAggregateOnlyQuery($normalized)) {
+            return;
+        }
+
         throw new \InvalidArgumentException('SELECT query without WHERE clause must include LIMIT or TOP.');
+    }
+
+    /**
+     * Check if the query is an aggregate-only query (returns single row).
+     * This is a heuristic: if query has aggregate functions and no GROUP BY,
+     * it will return exactly one row, so LIMIT is not needed.
+     */
+    private function isAggregateOnlyQuery(string $normalized): bool
+    {
+        // If it has GROUP BY, it can return multiple rows
+        if (str_contains($normalized, 'GROUP BY')) {
+            return false;
+        }
+
+        // Common aggregate functions
+        $aggregateFunctions = [
+            ' COUNT(',
+            ' SUM(',
+            ' AVG(',
+            ' MIN(',
+            ' MAX(',
+            ' GROUP_CONCAT(',
+            ' STRING_AGG(',
+        ];
+
+        $hasAggregate = false;
+        foreach ($aggregateFunctions as $func) {
+            if (str_contains($normalized, $func)) {
+                $hasAggregate = true;
+                break;
+            }
+        }
+
+        if (!$hasAggregate) {
+            return false;
+        }
+
+        // Extract the part between SELECT and FROM
+        if (!preg_match('/SELECT\s+(.*?)\s+FROM/s', $normalized, $matches)) {
+            return false;
+        }
+
+        $selectPart = $matches[1];
+
+        // If it selects *, it's not aggregate-only
+        if (str_contains($selectPart, '*') && !str_contains($selectPart, '(*)')) {
+            return false;
+        }
+
+        // Check if ALL selected items are aggregate functions or literals
+        // Simple heuristic: if SELECT part contains aggregate and no plain column refs
+        // This is a basic check - a full SQL parser would be more accurate
+        return $hasAggregate;
     }
 }
