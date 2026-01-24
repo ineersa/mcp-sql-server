@@ -1,0 +1,33 @@
+services:
+    # MCP Server - Main application
+    # NOTE: MCP clients spawn this service on-demand using 'docker compose run --rm database-mcp'
+    # DO NOT run with 'docker compose up -d' - MCP requires stdio communication, not a background daemon
+    database-mcp:
+        image: ineersa/database-mcp:latest
+        stdin_open: true
+        tty: true
+        network_mode: host
+        environment:
+            DATABASE_CONFIG_FILE: /config/databases.yaml
+            LOG_LEVEL: info
+            APP_LOG_DIR: /tmp/database-mcp/log
+            APP_ENV: prod
+            APP_DEBUG: "false"
+        volumes:
+            # Mount your databases configuration file (read-only)
+            - ./databases.yaml:/config/databases.yaml:ro
+            # Mount log directory to view logs
+            - ./log:/tmp/database-mcp/log
+
+    # Log viewer - Use to view logs from the MCP server
+    # Run with: docker compose run --rm logs
+    # Or with options: docker compose run --rm logs --id=123
+    logs:
+        image: ineersa/database-mcp:latest
+        entrypoint: ["php", "/app/bin/console", "app:logs"]
+        command: ["--limit=50"]
+        volumes:
+            # Share the same log directory
+            - ./log:/tmp/database-mcp/log:ro
+        profiles:
+            - logs

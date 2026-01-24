@@ -88,9 +88,20 @@
         ],
         "cs-fix": "vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php",
         "phpstan": "vendor/bin/phpstan analyse -c phpstan.dist.neon",
-        "tests": "vendor/bin/phpunit --colors=always --testdox",
-        "coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml",
-        "tests-xdebug": "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox",
+        "db-up": "docker compose -f docker-compose.test.yaml up -d --wait",
+        "db-down": "docker compose -f docker-compose.test.yaml down",
+        "tests": [
+            "@db-up",
+            "vendor/bin/phpunit --colors=always --testdox"
+        ],
+        "coverage": [
+            "@db-up",
+            "XDEBUG_MODE=coverage vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml"
+        ],
+        "tests-xdebug": [
+            "@db-up",
+            "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox"
+        ],
         "docker-build": "docker build -t ineersa/database-mcp:latest .",
         "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest ."
     },

@@ -82,29 +82,52 @@ doctrine:
 
 The Docker image includes all database drivers and is the easiest way to run the server.
 
-#### Usage
+#### Quick Start with Docker Compose
+
+1. **Copy the example configuration:**
 
 ```bash
-docker run --rm -i --network host \
-    -e DATABASE_CONFIG_FILE=/config/databases.yaml \
-    -e LOG_LEVEL=info \
-    -e APP_LOG_DIR=/tmp/logs \
-    -v /path/to/databases.yaml:/config/databases.yaml:ro \
-    -v /tmp/logs:/tmp/logs \
-    ineersa/database-mcp:latest
+cp docker-compose.example.yaml docker-compose.yaml
 ```
+
+2. **Create your `databases.yaml` configuration file** (see Configuration section above)
+
+3. **Configure your MCP client** (see "MCP Client Configuration" section below)
+
+The MCP client will automatically spawn the server when needed using `docker compose run --rm database-mcp`.
+
+#### Testing Your Setup
+
+To verify your configuration works before connecting an MCP client:
+
+```bash
+# Test the server responds to MCP protocol
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | \
+docker compose run --rm database-mcp
+```
+
+You should see a JSON response with server capabilities.
 
 #### Viewing Logs
 
-To view logs from the Docker container, mount the log directory:
-
 ```bash
-docker run --rm -it \
-    -v /tmp/database-mcp/log:/tmp/database-mcp/log:ro \
-    --entrypoint php \
-    ineersa/database-mcp:latest \
-    /app/bin/console app:logs
+# View recent logs
+docker compose run --rm logs
+
+# View a specific log entry by line number
+docker compose run --rm logs --id=42
+
+# View more entries
+docker compose run --rm logs --limit=100
 ```
+
+The example `docker-compose.yaml` is pre-configured with:
+
+- Proper volume mounts for configuration and logs
+- Environment variables
+- Host networking for database connectivity
+- Interactive stdin/tty for MCP protocol communication
+- A dedicated log viewer service
 
 ### Without Docker
 
@@ -121,37 +144,49 @@ DATABASE_CONFIG_FILE=./databases.yaml ./bin/database-mcp
 
 ### MCP Client Configuration
 
-Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop settings):
+Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop settings).
+
+#### Using Docker Compose
 
 ```json
 {
-    "database-server": {
+    "database": {
         "command": "docker",
         "args": [
+            "compose",
+            "-f",
+            "/path/to/docker-compose.yaml",
             "run",
             "--rm",
-            "-i",
-            "--network",
-            "host",
-            "--env-file",
-            "/path/to/database-mcp.env",
-            "-v",
-            "/path/to/databases.yaml:/config/databases.yaml:ro",
-            "ineersa/database-mcp:latest"
+            "database-mcp"
         ]
     }
 }
 ```
 
-Example `database-mcp.env` file:
+### Opencode.json
 
-```env
-DATABASE_CONFIG_FILE=/config/databases.yaml
-LOG_LEVEL=warning
-APP_LOG_DIR=/tmp/database-mcp/log
+```json
+{
+    "mcp": {
+        "database": {
+            "type": "local",
+            "command": [
+                "docker",
+                "compose",
+                "-f",
+                "/path/to/docker-compose.yaml",
+                "run",
+                "--rm",
+                "database-mcp"
+            ],
+            "enabled": true
+        }
+    }
+}
 ```
 
-For the local command:
+#### Using Local Installation
 
 ```json
 {
@@ -222,7 +257,6 @@ Executes read-only SQL queries against a specified database connection.
 - Results are returned in two formats:
     - **Markdown**: Human-readable tables with row counts (in `content`)
     - **Structured JSON**: Machine-readable data with schema (in `structuredContent`)
-- By default, queries should include `LIMIT 50` unless full data is needed
 - The tool dynamically lists available connections and their database types/versions
 
 **Example Request:**

@@ -51,7 +51,24 @@ modifying the codebase.
     composer tests
     ```
 
-    Runs PHPUnit 12 with TestDox output.
+    Runs PHPUnit 12 with TestDox output. Automatically starts test databases if
+    they're not running, but keeps them running for faster subsequent test runs.
+
+- **Stop Test Databases**:
+
+    ```bash
+    composer db-down
+    ```
+
+    Stops and removes test database containers when you're done testing.
+
+- **Start Test Databases Manually**:
+
+    ```bash
+    composer db-up
+    ```
+
+    Starts test database containers without running tests.
 
 ### Running Specific Tests
 
@@ -134,10 +151,14 @@ Follow the order defined in `.php-cs-fixer.dist.php`:
 ## 3. Testing Guidelines
 
 - **Prerequisites**:
-    - **Database Containers**: Before running tests, check if database containers
-      are running. If they are not, start them with `docker compose up -d`.
+    - **Database Containers**: The `composer tests` command automatically starts
+      and stops test database containers using `docker-compose.test.yaml`. You
+      don't need to manually manage them.
     - **MCP Inspector**: Ensure `npx @modelcontextprotocol/inspector` is **NOT**
       running before starting tests, as it will cause them to hang.
+    - **Manual Database Control**: If running tests via `vendor/bin/phpunit`
+      directly, ensure database containers are running with
+      `docker compose -f docker-compose.test.yaml up -d` first.
 - **Framework**: PHPUnit 12.
 - **Location**: Tests reside in `tests/` and should mirror the `src/` directory
   structure.
