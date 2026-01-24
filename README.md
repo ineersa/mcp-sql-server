@@ -89,6 +89,10 @@ The Docker image includes all database drivers and is the easiest way to run the
 ```bash
 wget https://raw.githubusercontent.com/ineersa/mcp-sql-server/refs/heads/main/docker-compose.example.yaml -O docker-compose.yaml
 ```
+Or via `CURL`
+```bash
+curl -L https://raw.githubusercontent.com/ineersa/mcp-sql-server/refs/heads/main/docker-compose.example.yaml -o docker-compose.yaml
+```
 
 2. **Create your `databases.yaml` configuration file** (see Configuration section above)
 
