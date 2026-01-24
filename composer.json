@@ -1,7 +1,7 @@
 {
     "name": "ineersa/database-mcp",
     "description": "MCP server implementation to work with SQL databases",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "type": "project",
     "license": "MIT",
     "authors": [

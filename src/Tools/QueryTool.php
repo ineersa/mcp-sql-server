@@ -17,7 +17,10 @@ final class QueryTool
     public const string DESCRIPTION = <<<DESCRIPTION
 Runs read-only SQL queries against chosen database connection. Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security. Multiple queries can be executed if separated by semicolons.
 
-When selecting data, always default to limiting the results to 10 records (e.g., LIMIT 10 or TOP 10) unless the user explicitly asks for more.
+When selecting data, always default to limiting the results to 10 records (e.g., LIMIT 10 or TOP 10). YOU MUST and I REPEAT YOU MUST always use LIMIT or TOP with SELECT queries.
+DEFAULT LIMIT - 10
+
+If the user asks to retrieve more than 10 records, you MUST USE PAGINATION (OFFSET and LIMIT/FETCH NEXT).
 
 If you need the total count of records, use a separate query like:
 SELECT COUNT(*) FROM table;
