@@ -24,20 +24,46 @@ File configuration follows `doctrine.yaml` Doctrine configuration standarts and 
 
 #### Multiple Named Connections
 
+Example configuration with various database types and configuration methods:
+
 ```yaml
 doctrine:
     dbal:
         connections:
-            production:
-                url: "mysql://user:pass@localhost:3306/mydb?serverVersion=8.0&charset=utf8mb4"
+            # SQLite with explicit path
+            local:
+                driver: "pdo_sqlite"
+                path: "var/test.sqlite"
+
+            # MySQL with URL/DSN format
+            products:
+                url: "mysql://user:password@127.0.0.1:3306/mydb?serverVersion=8.0&charset=utf8mb4"
+
+            # PostgreSQL with environment variable
+            users:
+                url: "%env(POSTGRES_DSN)%"
+
+            # SQL Server with explicit parameters and driver options
             analytics:
-                driver: "pdo_pgsql"
-                host: "postgres.local"
+                driver: "pdo_sqlsrv"
+                host: "127.0.0.1"
+                port: 1433
                 dbname: "analytics"
-                user: "analyst"
-                password: "%env(MY_PASSWORD)%"
-                serverVersion: "16"
+                user: "sa"
+                password: "MyPassword123"
+                serverVersion: "2019"
+                # Use 'options' (Doctrine standard) or 'driverOptions' (alias)
+                options:
+                    TrustServerCertificate: "yes"
 ```
+
+**Key Features:**
+
+- **URL/DSN Format**: Use `url` for connection strings (supports `%env(VAR)%` placeholders)
+- **Explicit Parameters**: Specify `driver`, `host`, `port`, `dbname`, `user`, `password` individually
+- **Environment Variables**: Use `%env(VAR_NAME)%` syntax for sensitive data
+- **Driver Options**: Use either `options` (Doctrine standard) or `driverOptions` (both work)
+- **Server Version**: Specify via `serverVersion` or `version` key
 
 #### Supported Database Drivers
 

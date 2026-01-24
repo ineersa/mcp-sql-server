@@ -240,11 +240,19 @@ final class DoctrineConfigLoader
         }
 
         // Always allow explicit overrides or fallback to standard components
-        $keys = ['host', 'port', 'dbname', 'user', 'password', 'driver', 'memory', 'path', 'applicationIntent', 'encrypt', 'trustServerCertificate', 'driverOptions'];
+        $keys = ['host', 'port', 'dbname', 'user', 'password', 'driver', 'memory', 'path', 'applicationIntent', 'encrypt', 'trustServerCertificate'];
         foreach ($keys as $key) {
             if (isset($config[$key])) {
                 $params[$key] = $config[$key];
             }
+        }
+
+        // Handle driver options: Doctrine uses 'options', we also accept 'driverOptions' as an alias
+        if (isset($config['options']) || isset($config['driverOptions'])) {
+            $params['driverOptions'] = array_merge(
+                $config['options'] ?? [],
+                $config['driverOptions'] ?? []
+            );
         }
 
         if (isset($config['version'])) {

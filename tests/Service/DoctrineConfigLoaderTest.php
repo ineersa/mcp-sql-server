@@ -221,4 +221,50 @@ YAML);
 
         $loader->loadAndValidate();
     }
+
+    public function testDriverOptionsSupportsBothOptionsAndDriverOptions(): void
+    {
+        // Test that both 'options' and 'driverOptions' work
+        $configWithOptions = <<<YAML
+doctrine:
+    dbal:
+        connections:
+            test:
+                driver: "pdo_sqlite"
+                path: "{$this->tempDir}/test.db"
+                options:
+                    key1: "value1"
+YAML;
+
+        file_put_contents($this->configFile, $configWithOptions);
+        $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
+
+        $loader = new DoctrineConfigLoader($this->logger);
+        $loader->loadAndValidate();
+
+        $connection = $loader->getConnection('test');
+        $this->assertNotNull($connection);
+        $this->assertSame('pdo_sqlite', $loader->getConnectionType('test'));
+
+        // Test with driverOptions
+        $configWithDriverOptions = <<<YAML
+doctrine:
+    dbal:
+        connections:
+            test2:
+                driver: "pdo_sqlite"
+                path: "{$this->tempDir}/test2.db"
+                driverOptions:
+                    key2: "value2"
+YAML;
+
+        file_put_contents($this->configFile, $configWithDriverOptions);
+
+        $loader2 = new DoctrineConfigLoader($this->logger);
+        $loader2->loadAndValidate();
+
+        $connection2 = $loader2->getConnection('test2');
+        $this->assertNotNull($connection2);
+        $this->assertSame('pdo_sqlite', $loader2->getConnectionType('test2'));
+    }
 }
