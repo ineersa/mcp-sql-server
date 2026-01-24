@@ -4,6 +4,7 @@ services:
     # DO NOT run with 'docker compose up -d' - MCP requires stdio communication, not a background daemon
     database-mcp:
         image: ineersa/database-mcp:latest
+        platform: linux/amd64
         stdin_open: true
         tty: true
         network_mode: host
@@ -24,6 +25,7 @@ services:
     # Or with options: docker compose run --rm logs --id=123
     logs:
         image: ineersa/database-mcp:latest
+        platform: linux/amd64
         entrypoint: ["php", "/app/bin/console", "app:logs"]
         command: ["--limit=50"]
         volumes:
