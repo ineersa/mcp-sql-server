@@ -2,13 +2,13 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT 'It''s a test'\n```\n### Count\n1\n\n### Rows\n| 'It''s a test' |\n| --- |\n| It's a test |\n\n"
+      "text": "## Query 1\n```sql\nSELECT 'It''s a test' LIMIT 1\n```\n### Count\n1\n\n### Rows\n| 'It''s a test' |\n| --- |\n| It's a test |\n\n"
     }
   ],
   "structuredContent": {
     "results": [
       {
-        "query": "SELECT 'It''s a test'",
+        "query": "SELECT 'It''s a test' LIMIT 1",
         "count": 1,
         "rows": [
           {

@@ -31,13 +31,18 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
         ];
 
         foreach (['local', 'products', 'users', 'server'] as $connection) {
+            $query = 'SELECT * FROM users ORDER BY id LIMIT 10';
+            if ('server' === $connection) {
+                $query = 'SELECT TOP 10 * FROM users ORDER BY id';
+            }
+
             $baseTests[\sprintf('Query Execution - %s', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => $connection,
-                        'query' => 'SELECT * FROM users ORDER BY id',
+                        'query' => $query,
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),

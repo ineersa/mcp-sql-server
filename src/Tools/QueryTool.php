@@ -17,8 +17,7 @@ final class QueryTool
     public const string DESCRIPTION = <<<DESCRIPTION
 Runs read-only SQL queries against chosen database connection. Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security. Multiple queries can be executed if separated by semicolons.
 
-Any SELECT query without WHERE clause MUST have LIMIT 10 (for MySQL, Postgres, SQLite), or TOP 10 for SQL Server.
-No exceptions, strict policy!
+Any SELECT query without WHERE clause MUST include LIMIT 10 (MySQL/Postgres) or TOP 10 (SQL Server). This is a hard requirement with no exceptions. You must add pagination to all queries. If your query lacks LIMIT/TOP, you MUST add it before execution. Do NOT attempt to retrieve unlimited results.
 
 To retrieve extra rows, you MUST USE PAGINATION (OFFSET and LIMIT/FETCH NEXT).
 
@@ -48,6 +47,7 @@ DESCRIPTION;
             $conn = $this->doctrineConfigLoader->getConnection($connection);
 
             foreach ($queries as $singleQuery) {
+                $this->validateQuery($singleQuery);
                 $rows = $this->safeQueryExecutor->execute($conn, $singleQuery);
                 $count = \count($rows);
 
@@ -286,5 +286,28 @@ DESCRIPTION;
         }
 
         return $table;
+    }
+
+    private function validateQuery(string $query): void
+    {
+        $normalized = strtoupper(trim($query));
+
+        if (!str_starts_with($normalized, 'SELECT')) {
+            return;
+        }
+
+        if (str_contains($normalized, 'WHERE ')) {
+            return;
+        }
+
+        if (str_contains($normalized, 'LIMIT ') || str_contains($normalized, 'TOP ')) {
+            return;
+        }
+
+        if (str_contains($normalized, 'FETCH NEXT')) {
+            return;
+        }
+
+        throw new \InvalidArgumentException('SELECT query without WHERE clause must include LIMIT or TOP.');
     }
 }

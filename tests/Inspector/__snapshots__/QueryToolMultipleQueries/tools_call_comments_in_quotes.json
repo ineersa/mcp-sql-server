@@ -2,13 +2,13 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT '-- not a comment' as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| -- not a comment |\n\n## Query 2\n```sql\nSELECT '/* not a comment */' as val2\n```\n### Count\n1\n\n### Rows\n| val2 |\n| --- |\n| /* not a comment */ |\n\n"
+      "text": "## Query 1\n```sql\nSELECT '-- not a comment' as val LIMIT 1\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| -- not a comment |\n\n## Query 2\n```sql\nSELECT '/* not a comment */' as val2 LIMIT 1\n```\n### Count\n1\n\n### Rows\n| val2 |\n| --- |\n| /* not a comment */ |\n\n"
     }
   ],
   "structuredContent": {
     "results": [
       {
-        "query": "SELECT '-- not a comment' as val",
+        "query": "SELECT '-- not a comment' as val LIMIT 1",
         "count": 1,
         "rows": [
           {
@@ -17,7 +17,7 @@
         ]
       },
       {
-        "query": "SELECT '/* not a comment */' as val2",
+        "query": "SELECT '/* not a comment */' as val2 LIMIT 1",
         "count": 1,
         "rows": [
           {

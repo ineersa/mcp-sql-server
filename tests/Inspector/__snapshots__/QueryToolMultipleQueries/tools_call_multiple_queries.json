@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT * FROM users WHERE id = 1\n```\n### Count\n1\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Alice | alice@example.com |\n\n## Query 2\n```sql\nSELECT count(*) as count FROM users\n```\n### Count\n1\n\n### Rows\n| count |\n| --- |\n| 3 |\n\n"
+      "text": "## Query 1\n```sql\nSELECT * FROM users WHERE id = 1\n```\n### Count\n1\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Alice | alice@example.com |\n\n## Query 2\n```sql\nSELECT count(*) as count FROM users LIMIT 1\n```\n### Count\n1\n\n### Rows\n| count |\n| --- |\n| 3 |\n\n"
     }
   ],
   "structuredContent": {
@@ -19,7 +19,7 @@
         ]
       },
       {
-        "query": "SELECT count(*) as count FROM users",
+        "query": "SELECT count(*) as count FROM users LIMIT 1",
         "count": 1,
         "rows": [
           {

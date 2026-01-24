@@ -31,7 +31,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => 'SELECT * FROM users WHERE id = 1; SELECT count(*) as count FROM users',
+                        'query' => 'SELECT * FROM users WHERE id = 1; SELECT count(*) as count FROM users LIMIT 1',
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
@@ -45,7 +45,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => "SELECT ';'; SELECT \"'\"",
+                        'query' => "SELECT ';' LIMIT 1; SELECT \"'\" LIMIT 1",
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
@@ -59,7 +59,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => "SELECT 'It''s a test'",
+                        'query' => "SELECT 'It''s a test' LIMIT 1",
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
@@ -73,7 +73,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => 'SELECT 1 as val; SELECT * FROM non_existent_table; SELECT 2 as val',
+                        'query' => 'SELECT 1 as val LIMIT 1; SELECT * FROM non_existent_table LIMIT 1; SELECT 2 as val LIMIT 1',
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
@@ -87,7 +87,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => "SELECT 1 as val; -- comment\nSELECT 2 as val /* block comment */; \n# hash comment\nSELECT 3 as val",
+                        'query' => "SELECT 1 as val LIMIT 1; -- comment\nSELECT 2 as val LIMIT 1 /* block comment */; \n# hash comment\nSELECT 3 as val LIMIT 1",
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
@@ -101,7 +101,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
                     'toolName' => 'query',
                     'toolArgs' => [
                         'connection' => 'local',
-                        'query' => "SELECT '-- not a comment' as val; SELECT '/* not a comment */' as val2",
+                        'query' => "SELECT '-- not a comment' as val LIMIT 1; SELECT '/* not a comment */' as val2 LIMIT 1",
                     ],
                     'envVars' => [
                         'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),

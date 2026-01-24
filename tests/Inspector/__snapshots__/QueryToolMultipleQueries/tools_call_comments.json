@@ -2,13 +2,13 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT 1 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 1 |\n\n## Query 2\n```sql\nSELECT 2 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 2 |\n\n## Query 3\n```sql\nSELECT 3 as val\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 3 |\n\n"
+      "text": "## Query 1\n```sql\nSELECT 1 as val LIMIT 1\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 1 |\n\n## Query 2\n```sql\nSELECT 2 as val LIMIT 1\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 2 |\n\n## Query 3\n```sql\nSELECT 3 as val LIMIT 1\n```\n### Count\n1\n\n### Rows\n| val |\n| --- |\n| 3 |\n\n"
     }
   ],
   "structuredContent": {
     "results": [
       {
-        "query": "SELECT 1 as val",
+        "query": "SELECT 1 as val LIMIT 1",
         "count": 1,
         "rows": [
           {
@@ -17,7 +17,7 @@
         ]
       },
       {
-        "query": "SELECT 2 as val",
+        "query": "SELECT 2 as val LIMIT 1",
         "count": 1,
         "rows": [
           {
@@ -26,7 +26,7 @@
         ]
       },
       {
-        "query": "SELECT 3 as val",
+        "query": "SELECT 3 as val LIMIT 1",
         "count": 1,
         "rows": [
           {

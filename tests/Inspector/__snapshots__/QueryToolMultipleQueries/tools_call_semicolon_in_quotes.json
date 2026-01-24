@@ -2,13 +2,13 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT ';'\n```\n### Count\n1\n\n### Rows\n| ';' |\n| --- |\n| ; |\n\n## Query 2\n```sql\nSELECT \"'\"\n```\n### Count\n1\n\n### Rows\n| \"'\" |\n| --- |\n| ' |\n\n"
+      "text": "## Query 1\n```sql\nSELECT ';' LIMIT 1\n```\n### Count\n1\n\n### Rows\n| ';' |\n| --- |\n| ; |\n\n## Query 2\n```sql\nSELECT \"'\" LIMIT 1\n```\n### Count\n1\n\n### Rows\n| \"'\" |\n| --- |\n| ' |\n\n"
     }
   ],
   "structuredContent": {
     "results": [
       {
-        "query": "SELECT ';'",
+        "query": "SELECT ';' LIMIT 1",
         "count": 1,
         "rows": [
           {
@@ -17,7 +17,7 @@
         ]
       },
       {
-        "query": "SELECT \"'\"",
+        "query": "SELECT \"'\" LIMIT 1",
         "count": 1,
         "rows": [
           {
