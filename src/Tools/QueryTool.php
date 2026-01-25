@@ -16,22 +16,17 @@ final class QueryTool
     public const string TITLE = 'Query database';
     public const string DESCRIPTION = <<<DESCRIPTION
 Runs read-only SQL queries against chosen database connection.
-Only SELECT and other read-only operations are allowed - INSERT, UPDATE, DELETE, DROP, and other write operations are blocked for security.
+Only SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.
 
-Any SELECT query without WHERE clause MUST include LIMIT (MySQL/Postgres/SQLite) or TOP (SQL Server).
-This is a hard requirement with no exceptions. You must add pagination to all queries.
-If your query lacks LIMIT/TOP, you MUST add it before execution.
-Do NOT attempt to retrieve unlimited results.
+RULES:
+1. Default to LIMIT 10 (MySQL/Postgres/SQLite) or TOP 10 (SQL Server) unless user requests more.
+2. SELECT without WHERE MUST have LIMIT/TOP - queries will be rejected otherwise.
+3. For more rows, use pagination with OFFSET.
 
-To retrieve extra rows, you MUST USE PAGINATION (OFFSET and LIMIT/FETCH NEXT).
-
-Examples for MySQL/PostgreSQL/SQLite:
-  SELECT * FROM table LIMIT 10;
-  SELECT COUNT(*) FROM table;
-
-Examples for SQL Server:
-  SELECT TOP 10 * FROM table;
-  SELECT COUNT(*) FROM table;
+Examples:
+  MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;
+  SQL Server: SELECT TOP 10 * FROM users;
+  Aggregates (no LIMIT needed): SELECT COUNT(*) FROM users;
 
 DESCRIPTION;
 
