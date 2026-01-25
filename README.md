@@ -51,8 +51,8 @@ That's it! Your MCP client will spawn the server automatically.
 Requires PHP 8.4+ with database extensions installed:
 
 ```bash
-git clone https://github.com/ineersa/database-mcp.git
-cd database-mcp
+git clone https://github.com/ineersa/mcp-sql-server.git
+cd mcp-sql-server
 composer install --no-dev
 ```
 
@@ -270,8 +270,8 @@ This server enforces **read-only mode** through multiple layers:
 ### Setup
 
 ```bash
-git clone https://github.com/ineersa/database-mcp.git
-cd database-mcp
+git clone https://github.com/ineersa/mcp-sql-server.git
+cd mcp-sql-server
 composer install
 ```
 
