@@ -18,9 +18,14 @@ final class QueryTool
 Runs read-only SQL queries against chosen database connection.
 Only SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.
 
+CRITICAL - ROW LIMIT:
+- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.
+- MySQL/PostgreSQL/SQLite: Use LIMIT 10
+- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)
+
 RULES:
-1. Default to LIMIT 10 (MySQL/Postgres/SQLite) or TOP 10 (SQL Server) unless user requests more.
-2. SELECT without WHERE MUST have LIMIT/TOP - queries will be rejected otherwise.
+1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.
+2. Check the connection type before writing the query - use correct syntax for that database.
 3. For more rows, use pagination with OFFSET.
 
 Examples:
