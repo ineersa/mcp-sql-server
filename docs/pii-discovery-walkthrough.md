@@ -60,7 +60,7 @@ This displays:
 
 ---
 
-## Running Tests
+### Running Tests
 
 ### Standard Tests (excludes PII tests)
 
@@ -71,12 +71,20 @@ vendor/bin/phpunit --exclude-group pii
 
 ### PII Integration Tests (requires Docker)
 
+Since Python is not available on the host machine, all PII tests must run inside Docker containers.
+
 ```bash
-# Run all tests inside Docker container
+# Run all tests inside Docker container (slow - runs everything)
 composer tests-docker
 
-# Run only PII-specific tests
+# Run only PII-specific tests (faster)
 composer tests-pii
+
+# Run a SINGLE test file (fastest for development)
+composer test -- tests/Command/PIIDiscoveryCommandTest.php
+
+# Run a specific test method
+composer test -- --filter itDetectsPiiInPiiSamplesTable
 ```
 
 ---
@@ -196,24 +204,58 @@ docker compose -f docker-compose.test.yaml build php-test
 
 ## Example Output
 
-```yaml
-PII Detection Results
-Found potential PII in 5 columns across 2 tables:
+```text
+PII Discovery
+=============
 
-users:
-  email:
-    - email
-  name:
+ Connection: products
+ Tables to scan: 3
+ Sample size: 50 rows per table
+ Confidence threshold: 90.0%
+
+ Starting GLiNER PII analyzer...
+ GLiNER ready
+
+Processing table pii_samples... Done
+ ---------------- ----------------------- ----------------------
+  Column           PII Type(s)             Sample
+ ---------------- ----------------------- ----------------------
+  customer_name    first_name, last_name   Jane Doe
+  customer_email   email                   jane.doe@company.org
+  phone            coordinate              555.456.7890
+  ip_address       ipv4                    192.168.1.100
+ ---------------- ----------------------- ----------------------
+
+Processing table products... Done
+Processing table users... Done
+ -------- ------------- -------------------
+  Column   PII Type(s)   Sample
+ -------- ------------- -------------------
+  name     first_name    Frank
+  email    email         frank@example.com
+ -------- ------------- -------------------
+
+
+PII Detection Results
+---------------------
+
+ Found potential PII in 6 columns across 2 tables:
+
+pii_samples:
+  customer_name:
     - first_name
     - last_name
+  customer_email:
+    - email
   phone:
-    - phone_number
-
-customers:
-  ssn:
-    - ssn
-  credit_card:
-    - credit_debit_card
+    - coordinate
+  ip_address:
+    - ipv4
+users:
+  name:
+    - first_name
+  email:
+    - email
 ```
 
 ---

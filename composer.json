@@ -103,6 +103,9 @@
             "docker compose -f docker-compose.test.yaml exec php-test php bin/console database:fixtures:load",
             "docker compose -f docker-compose.test.yaml exec -e XDEBUG_MODE=coverage php-test vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml"
         ],
+        "test": [
+            "docker compose -f docker-compose.test.yaml exec php-test vendor/bin/phpunit"
+        ],
         "console": [
             "docker compose -f docker-compose.test.yaml exec php-test php bin/console"
         ]

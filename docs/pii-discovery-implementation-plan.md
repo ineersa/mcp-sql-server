@@ -96,9 +96,8 @@ php bin/console pii:discover --connection=<name> [options]
 5. For each table:
     - Query random N rows (up to `--sample-size`, or all if fewer exist)
     - Send to Python via NDJSON
-    - Output info: `Processing table {table}...`
-    - Receive response, store results
-    - Output info: `Processed {table}, columns [{cols}] contain PII (samples: {examples})`
+    - Output info: `Processing table {table}... Done`
+    - Display formatted table of detected PII columns and samples
 6. Send shutdown to Python, wait for exit
 7. Output final YAML report
 
@@ -154,8 +153,8 @@ Simple Python script that:
 1. Loads GLiNER-PII model on startup
 2. Reads NDJSON from stdin
 3. For each request:
-    - Combines column data into text
-    - Runs `model.predict_entities()` with all 55+ labels
+    - Flattens all data from all columns into a single processing stream
+    - Processes text in large batches (size 256) using `model.batch_predict_entities()` for maximum throughput
     - Filters by confidence threshold (passed in request)
     - Returns column→PII types mapping + sample values
 4. Exits on shutdown action

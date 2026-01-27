@@ -69,20 +69,22 @@ modifying the codebase.
 
     Stops and removes test containers when you're done testing.
 
-### Running Specific Tests
+### Running Specific Tests (Fast)
 
-To run a single test file or specific test case, exec into the Docker container:
+Since Python and other dependencies are **only available in the Docker container** (not on the host), you must run tests via Docker.
+
+Once the containers are up (after running `composer tests` once), you can use the `composer test` command to run specific tests quickly without rebuilding/restarting containers.
 
 - **Run a specific test file**:
 
     ```bash
-    vendor/bin/phpunit tests/Service/MyServiceTest.php
+    composer test -- tests/Service/MyServiceTest.php
     ```
 
 - **Run a specific test method**:
 
     ```bash
-    vendor/bin/phpunit --filter testMyFeature
+    composer test -- --filter testMyFeature
     ```
 
 - **Run tests with coverage (requires XDebug)**:

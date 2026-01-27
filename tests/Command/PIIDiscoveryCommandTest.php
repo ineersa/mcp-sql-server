@@ -22,32 +22,37 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class PIIDiscoveryCommandTest extends TestCase
 {
     private DoctrineConfigLoader $configLoader;
-    private PIIAnalyzerService $analyzer;
+    private static ?PIIAnalyzerService $sharedAnalyzer = null;
     private CommandTester $commandTester;
     private Application $application;
+
+    public static function tearDownAfterClass(): void
+    {
+        if (null !== self::$sharedAnalyzer) {
+            self::$sharedAnalyzer->stop();
+            self::$sharedAnalyzer = null;
+        }
+    }
 
     protected function setUp(): void
     {
         $this->configLoader = new DoctrineConfigLoader(new NullLogger());
         $this->configLoader->loadAndValidate();
 
-        $this->analyzer = new PIIAnalyzerService(new NullLogger());
+        if (null === self::$sharedAnalyzer) {
+            self::$sharedAnalyzer = new PIIAnalyzerService(new NullLogger());
+        }
 
         $command = new PIIDiscoveryCommand(
             new NullLogger(),
             $this->configLoader,
-            $this->analyzer
+            self::$sharedAnalyzer
         );
 
         $this->application = new Application();
         $this->application->addCommand($command);
 
         $this->commandTester = new CommandTester($command);
-    }
-
-    protected function tearDown(): void
-    {
-        $this->analyzer->stop();
     }
 
     #[Test]
@@ -93,6 +98,12 @@ final class PIIDiscoveryCommandTest extends TestCase
         // Verify that at least some columns were detected (exact labels may vary by model version)
         // The model should detect most of: customer_name, phone, ip_address, etc.
         $this->assertStringContainsString('customer_name:', $display);
+
+        // Verify nice table output is also present
+        $this->assertStringContainsString('Processing table pii_samples...', $display);
+        $this->assertStringContainsString('Column', $display);
+        $this->assertStringContainsString('PII Type(s)', $display);
+        $this->assertStringContainsString('Sample', $display);
     }
 
     #[Test]

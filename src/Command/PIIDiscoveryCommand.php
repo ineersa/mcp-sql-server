@@ -157,10 +157,8 @@ class PIIDiscoveryCommand extends Command
             /** @var array<string, array<string, list<string>>> $results */
             $results = [];
 
-            $io->progressStart(\count($tables));
-
             foreach ($tables as $tableName) {
-                $io->progressAdvance();
+                $io->write(\sprintf('Processing table <info>%s</info>... ', $tableName));
                 $this->logger->info(\sprintf('Processing table: %s', $tableName));
 
                 try {
@@ -168,6 +166,7 @@ class PIIDiscoveryCommand extends Command
                     $rows = $this->fetchSampleRows($connection, $tableName, $sampleSize);
 
                     if ([] === $rows) {
+                        $io->writeln('Skipped (empty)');
                         continue;
                     }
 
@@ -178,31 +177,41 @@ class PIIDiscoveryCommand extends Command
                     // Analyze with GLiNER
                     $analysis = $this->piiAnalyzer->analyze($tableName, $columns, $data, $threshold);
 
+                    $io->writeln('Done');
+
                     if ([] !== $analysis['results']) {
                         $results[$tableName] = $analysis['results'];
 
-                        // Show samples in verbose mode
-                        if ($output->isVerbose() && [] !== $analysis['samples']) {
-                            $sampleInfo = [];
-                            foreach ($analysis['samples'] as $col => $sample) {
-                                $sampleInfo[] = \sprintf('%s: "%s"', $col, $sample);
+                        $tableRows = [];
+                        foreach ($analysis['results'] as $column => $piiTypes) {
+                            $sample = $analysis['samples'][$column] ?? 'N/A';
+                            // Truncate long samples
+                            if (\strlen($sample) > 50) {
+                                $sample = substr($sample, 0, 47).'...';
                             }
-                            $io->text(\sprintf('  %s: %s', $tableName, implode(', ', $sampleInfo)));
+                            $tableRows[] = [
+                                $column,
+                                implode(', ', $piiTypes),
+                                $sample,
+                            ];
                         }
+
+                        $io->table(
+                            ['Column', 'PII Type(s)', 'Sample'],
+                            $tableRows
+                        );
                     }
                 } catch (\Throwable $e) {
-                    $io->progressFinish();
                     $this->piiAnalyzer->stop();
+                    $io->newLine();
                     $io->error(\sprintf('Error processing table "%s": %s', $tableName, $e->getMessage()));
 
                     return Command::FAILURE;
                 }
             }
 
-            $io->progressFinish();
-
-            // Stop analyzer
-            $this->piiAnalyzer->stop();
+            // Stop analyzer is handled by PIIAnalyzerService destructor
+            // $this->piiAnalyzer->stop();
 
             // Output results
             $io->newLine();
@@ -234,7 +243,7 @@ class PIIDiscoveryCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
-            $this->piiAnalyzer->stop();
+            // $this->piiAnalyzer->stop();
             $this->logger->error('PII discovery failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),

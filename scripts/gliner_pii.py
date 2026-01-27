@@ -64,77 +64,92 @@ def load_model():
         sys.exit(1)
 
 
-def analyze_column(model, column_data: list[str], threshold: float) -> tuple[set[str], str | None]:
-    """
-    Analyze a column's data for PII entities.
-
-    Returns:
-        Tuple of (set of detected PII types, sample value that triggered detection)
-    """
-    detected_types: set[str] = set()
-    sample_value: str | None = None
-
-    # Combine all values into text blocks for analysis
-    for value in column_data:
-        if value is None or str(value).strip() == "":
-            continue
-
-        text = str(value)
-
-        try:
-            entities = model.predict_entities(text, ALL_LABELS, threshold=threshold)
-
-            for entity in entities:
-                label = entity.get("label", "")
-                score = entity.get("score", 0)
-
-                if score >= threshold and label in ALL_LABELS:
-                    detected_types.add(label)
-                    if sample_value is None:
-                        sample_value = text[:50]  # Truncate for display
-
-        except Exception:
-            # Skip problematic values
-            continue
-
-    return detected_types, sample_value
-
-
 def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
-    """Process an analyze request and return results."""
+    """Process an analyze request and return results using flattened batch processing."""
     table = request.get("table", "unknown")
     columns = request.get("columns", [])
     data = request.get("data", [])
     threshold = request.get("threshold", 0.9)
 
-    results: dict[str, list[str]] = {}
+    results: dict[str, set[str]] = {}
     samples: dict[str, str] = {}
 
-    # Build column data from rows
+    # 1. Flatten all data: Collect all valid texts with their column association
+    # List of tuples: (column_name, text_value)
+    tasks: list[tuple[str, str]] = []
+
     num_columns = len(columns)
+
+    # Extract values for each column and add to tasks (flat list)
+    # We maintain column grouping implicitly by iterating columns outer logic if desired,
+    # but here we iterate cells.
+
+    # To keep context grouped by column (usually preferred for batching similar text),
+    # we collect by column first.
     column_values: dict[int, list[str]] = {i: [] for i in range(num_columns)}
 
     for row in data:
         for i, value in enumerate(row):
             if i < num_columns:
-                column_values[i].append(str(value) if value is not None else "")
+                val_str = str(value) if value is not None else ""
+                if val_str.strip():
+                    column_values[i].append(val_str)
 
-    # Analyze each column
+    # Build the task list ordered by column
     for i, column_name in enumerate(columns):
-        values = column_values.get(i, [])
-        if not values:
+        for val in column_values.get(i, []):
+            tasks.append((column_name, val))
+
+    if not tasks:
+        return {
+            "table": table,
+            "results": {},
+            "samples": {}
+        }
+
+    # 2. Process in large batches
+    BATCH_SIZE = 256
+
+    for i in range(0, len(tasks), BATCH_SIZE):
+        batch_tasks = tasks[i:i + BATCH_SIZE]
+        batch_texts = [t[1] for t in batch_tasks]
+
+        try:
+            # Predict batch
+            if hasattr(model, 'batch_predict_entities'):
+                batch_predictions = model.batch_predict_entities(batch_texts, ALL_LABELS, threshold=threshold)
+            else:
+                batch_predictions = [model.predict_entities(t, ALL_LABELS, threshold=threshold) for t in batch_texts]
+
+            # Process results
+            for j, entities in enumerate(batch_predictions):
+                column_name, text = batch_tasks[j]
+
+                for entity in entities:
+                    label = entity.get("label", "")
+                    score = entity.get("score", 0)
+
+                    if score >= threshold and label in ALL_LABELS:
+                        if column_name not in results:
+                            results[column_name] = set()
+
+                        results[column_name].add(label)
+
+                        # Save first sample detected
+                        if column_name not in samples:
+                            samples[column_name] = text[:50]
+
+        except Exception as e:
+            # Log error but continue with next batch
+            sys.stderr.write(f"Batch error: {str(e)}\n")
             continue
 
-        detected, sample = analyze_column(model, values, threshold)
-
-        if detected:
-            results[column_name] = sorted(list(detected))
-            if sample:
-                samples[column_name] = sample
+    # 3. Format results as sorted lists
+    final_results = {k: sorted(list(v)) for k, v in results.items()}
 
     return {
         "table": table,
-        "results": results,
+        "results": final_results,
         "samples": samples
     }
 
