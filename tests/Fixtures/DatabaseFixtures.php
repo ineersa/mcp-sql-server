@@ -19,6 +19,7 @@ final class DatabaseFixtures
         $type = self::detectDatabaseType($connection);
 
         // Drop tables in reverse order due to potential foreign keys
+        $connection->executeStatement('DROP TABLE IF EXISTS pii_samples');
         $connection->executeStatement('DROP TABLE IF EXISTS products');
         $connection->executeStatement('DROP TABLE IF EXISTS users');
     }
@@ -29,6 +30,7 @@ final class DatabaseFixtures
 
         self::createUsersTable($connection, $type);
         self::createProductsTable($connection, $type);
+        self::createPiiSamplesTable($connection, $type);
     }
 
     public static function loadFixtures(Connection $connection): void
@@ -43,6 +45,11 @@ final class DatabaseFixtures
         $products = self::getExpectedProducts($type);
         foreach ($products as $product) {
             $connection->insert('products', $product);
+        }
+
+        $piiSamples = self::getExpectedPiiSamples();
+        foreach ($piiSamples as $sample) {
+            $connection->insert('pii_samples', $sample);
         }
     }
 
@@ -100,6 +107,47 @@ final class DatabaseFixtures
             ],
             default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),
         };
+    }
+
+    /**
+     * Get expected PII sample data for testing.
+     *
+     * @return array<int, array{id: int, customer_name: string, customer_email: string, phone: string, ssn: string, credit_card: string, ip_address: string, notes: string}>
+     */
+    public static function getExpectedPiiSamples(): array
+    {
+        return [
+            [
+                'id' => 1,
+                'customer_name' => 'John Smith',
+                'customer_email' => 'john.smith@example.com',
+                'phone' => '(555) 123-4567',
+                'ssn' => '123-45-6789',
+                'credit_card' => '4532015112830366',
+                'ip_address' => '192.168.1.100',
+                'notes' => 'Regular customer since 2020',
+            ],
+            [
+                'id' => 2,
+                'customer_name' => 'Jane Doe',
+                'customer_email' => 'jane.doe@company.org',
+                'phone' => '+1-555-987-6543',
+                'ssn' => '987-65-4321',
+                'credit_card' => '5425233430109903',
+                'ip_address' => '10.0.0.50',
+                'notes' => 'VIP account holder',
+            ],
+            [
+                'id' => 3,
+                'customer_name' => 'Robert Johnson',
+                'customer_email' => 'rjohnson@email.net',
+                'phone' => '555.456.7890',
+                'ssn' => '456-78-9012',
+                'credit_card' => '374245455400126',
+                'ip_address' => '172.16.0.1',
+                'notes' => 'Prefers email contact',
+            ],
+        ];
     }
 
     private static function detectDatabaseType(Connection $connection): string
@@ -195,6 +243,63 @@ final class DatabaseFixtures
                     id INT PRIMARY KEY,
                     name NVARCHAR(255) NOT NULL,
                     price DECIMAL(10, 2) NOT NULL
+                )
+            ',
+            default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),
+        };
+
+        $connection->executeStatement($sql);
+    }
+
+    private static function createPiiSamplesTable(Connection $connection, string $type): void
+    {
+        $sql = match ($type) {
+            'pdo_sqlite' => '
+                CREATE TABLE pii_samples (
+                    id INTEGER PRIMARY KEY,
+                    customer_name TEXT NOT NULL,
+                    customer_email TEXT NOT NULL,
+                    phone TEXT NOT NULL,
+                    ssn TEXT NOT NULL,
+                    credit_card TEXT NOT NULL,
+                    ip_address TEXT NOT NULL,
+                    notes TEXT NOT NULL
+                )
+            ',
+            'pdo_mysql' => '
+                CREATE TABLE pii_samples (
+                    id INT PRIMARY KEY,
+                    customer_name VARCHAR(255) NOT NULL,
+                    customer_email VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) NOT NULL,
+                    ssn VARCHAR(20) NOT NULL,
+                    credit_card VARCHAR(20) NOT NULL,
+                    ip_address VARCHAR(45) NOT NULL,
+                    notes TEXT NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ',
+            'pdo_pgsql' => '
+                CREATE TABLE pii_samples (
+                    id INTEGER PRIMARY KEY,
+                    customer_name VARCHAR(255) NOT NULL,
+                    customer_email VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) NOT NULL,
+                    ssn VARCHAR(20) NOT NULL,
+                    credit_card VARCHAR(20) NOT NULL,
+                    ip_address VARCHAR(45) NOT NULL,
+                    notes TEXT NOT NULL
+                )
+            ',
+            'pdo_sqlsrv' => '
+                CREATE TABLE pii_samples (
+                    id INT PRIMARY KEY,
+                    customer_name NVARCHAR(255) NOT NULL,
+                    customer_email NVARCHAR(255) NOT NULL,
+                    phone NVARCHAR(50) NOT NULL,
+                    ssn NVARCHAR(20) NOT NULL,
+                    credit_card NVARCHAR(20) NOT NULL,
+                    ip_address NVARCHAR(45) NOT NULL,
+                    notes NVARCHAR(MAX) NOT NULL
                 )
             ',
             default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),

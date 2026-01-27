@@ -51,28 +51,20 @@ modifying the codebase.
     composer tests
     ```
 
-    Runs PHPUnit 12 with TestDox output. Automatically starts test databases if
-    they're not running, but keeps them running for faster subsequent test runs.
+    Runs PHPUnit 12 with TestDox output inside Docker containers. Automatically
+    builds and starts all required containers (PHP, MySQL, PostgreSQL, SQL Server).
 
-- **Stop Test Databases**:
-
-    ```bash
-    composer db-down
-    ```
-
-    Stops and removes test database containers when you're done testing.
-
-- **Start Test Databases Manually**:
+- **Stop Test Containers**:
 
     ```bash
-    composer db-up
+    docker compose -f docker-compose.test.yaml down
     ```
 
-    Starts test database containers without running tests.
+    Stops and removes test containers when you're done testing.
 
 ### Running Specific Tests
 
-To run a single test file or specific test case, use the PHPUnit binary directly:
+To run a single test file or specific test case, exec into the Docker container:
 
 - **Run a specific test file**:
 
@@ -151,14 +143,12 @@ Follow the order defined in `.php-cs-fixer.dist.php`:
 ## 3. Testing Guidelines
 
 - **Prerequisites**:
-    - **Database Containers**: The `composer tests` command automatically starts
-      and stops test database containers using `docker-compose.test.yaml`. You
-      don't need to manually manage them.
+    - **Docker**: All tests run inside Docker containers via `composer tests`.
+      This automatically starts PHP, MySQL, PostgreSQL, and SQL Server containers.
     - **MCP Inspector**: Ensure `npx @modelcontextprotocol/inspector` is **NOT**
       running before starting tests, as it will cause them to hang.
-    - **Manual Database Control**: If running tests via `vendor/bin/phpunit`
-      directly, ensure database containers are running with
-      `docker compose -f docker-compose.test.yaml up -d` first.
+    - **Running Specific Tests**: To run a specific test, exec into the container:
+      `docker compose -f docker-compose.test.yaml exec php-test vendor/bin/phpunit tests/Path/To/Test.php`
 - **Framework**: PHPUnit 12.
 - **Location**: Tests reside in `tests/` and should mirror the `src/` directory
   structure.

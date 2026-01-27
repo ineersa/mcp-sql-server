@@ -1,0 +1,9 @@
+# GLiNER PII Detection Dependencies
+# Install with: pip install -r requirements.txt
+
+# GLiNER library for NER
+gliner>=0.2.0
+
+# PyTorch (CPU version for smaller image size)
+# For GPU support, install separately: pip install torch --index-url https://download.pytorch.org/whl/cu118
+torch

@@ -1,9 +1,9 @@
 {
-  "contents": [
-    {
-      "uri": "db://local",
-      "mimeType": "text/plain",
-      "text": "products\nusers"
-    }
-  ]
+    "contents": [
+        {
+            "uri": "db://local",
+            "mimeType": "text/plain",
+            "text": "pii_samples\nproducts\nusers"
+        }
+    ]
 }
