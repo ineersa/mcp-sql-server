@@ -8,6 +8,7 @@ use App\Resources\ConnectionResource;
 use App\Resources\TableResource;
 use App\Service\ComposerMetadataExtractor;
 use App\Service\DoctrineConfigLoader;
+use App\Service\PIIAnalyzerService;
 use App\Tools\QueryTool;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\ToolAnnotations;
@@ -35,6 +36,7 @@ class DatabaseMcpCommand extends Command
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
         private DoctrineConfigLoader $doctrineConfigLoader,
+        private PIIAnalyzerService $piiAnalyzerService,
     ) {
         parent::__construct();
     }
@@ -47,6 +49,11 @@ class DatabaseMcpCommand extends Command
     {
         try {
             $this->doctrineConfigLoader->loadAndValidate();
+
+            if ($this->doctrineConfigLoader->hasAnyPiiEnabled()) {
+                $this->logger->info('PII protection enabled, starting GLiNER analyzer...');
+                $this->piiAnalyzerService->start();
+            }
 
             $builder = Server::builder()
                 ->setServerInfo(

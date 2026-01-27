@@ -6,6 +6,7 @@ doctrine:
                 path: "var/test.sqlite"
             products:
                 url: "mysql://test_user:test_password@mysql:3306/mcp_test?serverVersion=8.0&charset=utf8mb4"
+                pii_enabled: true
             users:
                 url: "postgresql://test_user:test_password@postgres:5432/mcp_test"
             server:

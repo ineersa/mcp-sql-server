@@ -182,6 +182,70 @@ final class PIIAnalyzerService
     }
 
     /**
+     * Redact PII values from query result rows.
+     *
+     * @param list<array<string, mixed>> $rows      Query result rows to redact
+     * @param float                      $threshold Confidence threshold (0.0-1.0)
+     *
+     * @return list<array<string, mixed>> Rows with PII values replaced by [REDACTED_type]
+     *
+     * @throws \RuntimeException if redaction fails
+     */
+    public function redact(array $rows, float $threshold = 0.9): array
+    {
+        if ([] === $rows) {
+            return [];
+        }
+
+        if (null === $this->stdin || null === $this->stdout || !\is_resource($this->stdin) || !\is_resource($this->stdout)) {
+            throw new \RuntimeException('GLiNER process not started or not running. Call start() first.');
+        }
+
+        $columns = array_keys($rows[0]);
+        $data = array_map('array_values', $rows);
+
+        $request = [
+            'action' => 'redact',
+            'columns' => $columns,
+            'data' => $data,
+            'threshold' => $threshold,
+        ];
+
+        $this->writeLine(json_encode($request, \JSON_THROW_ON_ERROR));
+
+        while (true) {
+            $line = $this->readLine(1);
+
+            if (null !== $line) {
+                $response = json_decode($line, true);
+
+                if (!\is_array($response)) {
+                    throw new \RuntimeException('Invalid JSON response from GLiNER');
+                }
+
+                if (isset($response['error'])) {
+                    throw new \RuntimeException('GLiNER redaction error: '.$response['error']);
+                }
+
+                $redactedData = $response['data'] ?? [];
+                $result = [];
+
+                foreach ($redactedData as $rowData) {
+                    $row = [];
+                    foreach ($columns as $i => $col) {
+                        $row[$col] = $rowData[$i] ?? null;
+                    }
+                    $result[] = $row;
+                }
+
+                return $result;
+            }
+
+            usleep(50000);
+        }
+    }
+
+    /**
      * Stop the Python subprocess gracefully.
      */
     public function stop(): void

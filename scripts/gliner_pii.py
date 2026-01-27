@@ -154,6 +154,53 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def redact_request(model, request: dict[str, Any]) -> dict[str, Any]:
+    """Process a redact request and return rows with PII values replaced."""
+    columns = request.get("columns", [])
+    data = request.get("data", [])
+    threshold = request.get("threshold", 0.9)
+
+    if not data or not columns:
+        return {"data": data}
+
+    num_columns = len(columns)
+    redacted_data = [list(row) for row in data]
+
+    # Process each cell
+    for row_idx, row in enumerate(data):
+        for col_idx, value in enumerate(row):
+            if col_idx >= num_columns or value is None:
+                continue
+
+            val_str = str(value)
+            if not val_str.strip():
+                continue
+
+            try:
+                entities = model.predict_entities(val_str, ALL_LABELS, threshold=threshold)
+
+                if entities:
+                    # Sort entities by start position descending (to replace from end)
+                    entities_sorted = sorted(entities, key=lambda e: e.get("start", 0), reverse=True)
+
+                    for entity in entities_sorted:
+                        start = entity.get("start", 0)
+                        end = entity.get("end", 0)
+                        label = entity.get("label", "unknown")
+                        score = entity.get("score", 0)
+
+                        if score >= threshold and start < end:
+                            val_str = val_str[:start] + f"[REDACTED_{label}]" + val_str[end:]
+
+                    redacted_data[row_idx][col_idx] = val_str
+
+            except Exception:
+                # Keep original value if prediction fails
+                continue
+
+    return {"data": redacted_data}
+
+
 def main():
     """Main entry point - reads NDJSON from stdin, writes responses to stdout."""
     # Send ready signal
@@ -188,6 +235,14 @@ def main():
                 print(json.dumps({
                     "error": f"Analysis failed: {str(e)}",
                     "table": request.get("table", "unknown")
+                }), flush=True)
+        elif action == "redact":
+            try:
+                response = redact_request(model, request)
+                print(json.dumps(response), flush=True)
+            except Exception as e:
+                print(json.dumps({
+                    "error": f"Redaction failed: {str(e)}"
                 }), flush=True)
         else:
             print(json.dumps({"error": f"Unknown action: {action}"}), flush=True)

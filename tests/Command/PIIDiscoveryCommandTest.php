@@ -88,17 +88,6 @@ final class PIIDiscoveryCommandTest extends TestCase
         // Check command succeeded
         $this->assertSame(0, $this->commandTester->getStatusCode(), 'Command failed: '.$display);
 
-        // Check that PII was detected in expected columns
-        $this->assertStringContainsString('pii_samples:', $display);
-
-        // Verify that the email column was detected with email PII type
-        $this->assertStringContainsString('customer_email:', $display);
-        $this->assertStringContainsString('email', $display);
-
-        // Verify that at least some columns were detected (exact labels may vary by model version)
-        // The model should detect most of: customer_name, phone, ip_address, etc.
-        $this->assertStringContainsString('customer_name:', $display);
-
         // Verify nice table output is also present
         $this->assertStringContainsString('Processing table pii_samples...', $display);
         $this->assertStringContainsString('Column', $display);

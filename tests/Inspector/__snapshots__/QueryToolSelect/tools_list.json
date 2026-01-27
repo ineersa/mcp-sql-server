@@ -1,56 +1,65 @@
 {
-    "tools": [
-        {
-            "name": "query",
-            "description": "Runs read-only SQL queries against chosen database connection.\nOnly SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.\n\nCRITICAL - ROW LIMIT:\n- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.\n- MySQL/PostgreSQL/SQLite: Use LIMIT 10\n- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)\n\nRULES:\n1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.\n2. Check the connection type before writing the query - use correct syntax for that database.\n3. For more rows, use pagination with OFFSET.\n\nExamples:\n  MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;\n  SQL Server: SELECT TOP 10 * FROM users;\n  Aggregates (no LIMIT needed): SELECT COUNT(*) FROM users;\n\nAvailable connections:\n - local : SQLite, version 3.40.1\n - products : MySQL, version 8.0\n - users : Postgres, version 16.11 (Debian 16.11-1.pgdg13+1)\n - server : SQL Server, version 2019",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "connection": {
-                        "type": "string",
-                        "description": "the name of the database connection to use"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "The SQL query (or queries) to execute. Multiple queries must be separated by semicolons."
-                    }
+  "tools": [
+    {
+      "name": "query",
+      "description": "Runs read-only SQL queries against chosen database connection.\nOnly SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.\n\nCRITICAL - ROW LIMIT:\n- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.\n- MySQL/PostgreSQL/SQLite: Use LIMIT 10\n- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)\n\nRULES:\n1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.\n2. Check the connection type before writing the query - use correct syntax for that database.\n3. For more rows, use pagination with OFFSET.\n\nExamples:\n  MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;\n  SQL Server: SELECT TOP 10 * FROM users;\n  Aggregates (no LIMIT needed): SELECT COUNT(*) FROM users;\n\nAvailable connections:\n - local : SQLite, version 3.40.1\n - products : MySQL, version 8.0 [PII GUARDED - sensitive data will be redacted]\n - users : Postgres, version 16.11 (Debian 16.11-1.pgdg13+1)\n - server : SQL Server, version 2019",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "description": "the name of the database connection to use"
+          },
+          "query": {
+            "type": "string",
+            "description": "The SQL query (or queries) to execute. Multiple queries must be separated by semicolons."
+          }
+        },
+        "required": [
+          "connection",
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "The SQL query that was executed"
                 },
-                "required": ["connection", "query"]
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "The SQL query that was executed"
-                                },
-                                "count": {
-                                    "type": "integer",
-                                    "description": "The number of rows returned by the query"
-                                },
-                                "rows": {
-                                    "type": "array",
-                                    "description": "The rows returned by the query as an array of objects"
-                                }
-                            },
-                            "required": ["query", "count", "rows"]
-                        }
-                    }
+                "count": {
+                  "type": "integer",
+                  "description": "The number of rows returned by the query"
                 },
-                "required": ["results"]
-            },
-            "annotations": {
-                "title": "Query database",
-                "readOnlyHint": true,
-                "destructiveHint": true,
-                "idempotentHint": false,
-                "openWorldHint": false
+                "rows": {
+                  "type": "array",
+                  "description": "The rows returned by the query as an array of objects"
+                }
+              },
+              "required": [
+                "query",
+                "count",
+                "rows"
+              ]
             }
-        }
-    ]
+          }
+        },
+        "required": [
+          "results"
+        ]
+      },
+      "annotations": {
+        "title": "Query database",
+        "readOnlyHint": true,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    }
+  ]
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tools;
 
 use App\Service\DoctrineConfigLoader;
+use App\Service\PIIAnalyzerService;
 use App\Service\SafeQueryExecutor;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
@@ -38,6 +39,7 @@ DESCRIPTION;
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
         private SafeQueryExecutor $safeQueryExecutor,
+        private PIIAnalyzerService $piiAnalyzerService,
         private LoggerInterface $logger,
     ) {
     }
@@ -55,10 +57,16 @@ DESCRIPTION;
 
         try {
             $conn = $this->doctrineConfigLoader->getConnection($connection);
+            $piiEnabled = $this->doctrineConfigLoader->isPiiEnabled($connection);
 
             foreach ($queries as $singleQuery) {
                 $this->validateQuery($singleQuery);
                 $rows = $this->safeQueryExecutor->execute($conn, $singleQuery);
+
+                if ($piiEnabled && [] !== $rows) {
+                    $rows = $this->piiAnalyzerService->redact($rows);
+                }
+
                 $count = \count($rows);
 
                 $results[] = [
@@ -129,11 +137,16 @@ DESCRIPTION;
                 }
             }
 
+            $piiGuard = $doctrineConfigLoader->isPiiEnabled($connectionName)
+                ? ' [PII GUARDED - sensitive data will be redacted]'
+                : '';
+
             $description .= \sprintf(
-                "\n - %s : %s, version %s",
+                "\n - %s : %s, version %s%s",
                 $connectionName,
                 $platform,
-                $version
+                $version,
+                $piiGuard
             );
         }
 

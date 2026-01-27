@@ -14,7 +14,7 @@ use Symfony\Component\Yaml\Yaml;
 
 final class DoctrineConfigLoader
 {
-    /** @var array<string, array{name: string, type: string, version: ?string, connection: Connection}> */
+    /** @var array<string, array{name: string, type: string, version: ?string, pii_enabled: bool, connection: Connection}> */
     private array $connections = [];
 
     public function __construct(
@@ -71,6 +71,22 @@ final class DoctrineConfigLoader
     public function getConnectionVersion(string $name): ?string
     {
         return $this->connections[$name]['version'] ?? null;
+    }
+
+    public function isPiiEnabled(string $name): bool
+    {
+        return $this->connections[$name]['pii_enabled'] ?? false;
+    }
+
+    public function hasAnyPiiEnabled(): bool
+    {
+        foreach ($this->connections as $data) {
+            if ($data['pii_enabled']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return string[] */
@@ -183,6 +199,7 @@ final class DoctrineConfigLoader
         $params = $this->extractConnectionParams($connectionConfig);
         $type = $this->extractDatabaseType($params);
         $version = $params['serverVersion'] ?? null;
+        $piiEnabled = isset($connectionConfig['pii_enabled']) && true === $connectionConfig['pii_enabled'];
 
         // Add read-only middleware for all connections
         $params['middlewares'] = [new \App\ReadOnly\ReadOnlyMiddleware()];
@@ -194,14 +211,16 @@ final class DoctrineConfigLoader
                 'name' => $name,
                 'type' => $type,
                 'version' => \is_string($version) ? $version : null,
+                'pii_enabled' => $piiEnabled,
                 'connection' => $connection,
             ];
 
             $this->logger->info(\sprintf(
-                'Successfully connected to database "%s" (type: %s, version: %s)',
+                'Successfully connected to database "%s" (type: %s, version: %s, pii: %s)',
                 $name,
                 $type,
-                $version ?? 'unknown'
+                $version ?? 'unknown',
+                $piiEnabled ? 'enabled' : 'disabled'
             ));
         } catch (Exception $e) {
             throw new \RuntimeException(\sprintf('Failed to create connection "%s": %s', $name, $e->getMessage()), previous: $e);

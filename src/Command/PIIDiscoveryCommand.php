@@ -15,7 +15,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\Yaml\Yaml;
 
 #[AsCommand(
     name: 'pii:discover',
@@ -209,37 +208,6 @@ class PIIDiscoveryCommand extends Command
                     return Command::FAILURE;
                 }
             }
-
-            // Stop analyzer is handled by PIIAnalyzerService destructor
-            // $this->piiAnalyzer->stop();
-
-            // Output results
-            $io->newLine();
-
-            if ([] === $results) {
-                $io->success('No PII detected in any columns.');
-
-                return Command::SUCCESS;
-            }
-
-            $io->section('PII Detection Results');
-
-            // Count summary
-            $totalColumns = 0;
-            foreach ($results as $tableResults) {
-                $totalColumns += \count($tableResults);
-            }
-
-            $io->text(\sprintf(
-                'Found potential PII in <comment>%d</comment> columns across <comment>%d</comment> tables:',
-                $totalColumns,
-                \count($results)
-            ));
-            $io->newLine();
-
-            // Output YAML format
-            $yaml = Yaml::dump($results, 4, 2);
-            $io->writeln($yaml);
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
