@@ -16,6 +16,13 @@ modifying the codebase.
 
     _Requires PHP >= 8.4_.
 
+- **Run Console Commands**:
+
+    ```bash
+    composer console -- <command>
+    # Example: composer console -- list
+    ```
+
 - **Run the Server Locally**:
 
     ```bash

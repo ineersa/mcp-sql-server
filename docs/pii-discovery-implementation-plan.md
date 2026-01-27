@@ -175,13 +175,11 @@ graph TB
         mysql["mysql:8.0"]
         postgres["postgres:16"]
         sqlserver["mssql:2019"]
-        hf_cache["huggingface-cache<br/>(volume)"]
     end
 
     php_test -->|"network"| mysql
     php_test -->|"network"| postgres
     php_test -->|"network"| sqlserver
-    php_test -->|"mount"| hf_cache
 ```
 
 **Composer Scripts:**

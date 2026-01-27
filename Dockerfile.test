@@ -82,7 +82,6 @@ WORKDIR /app
 
 # Environment for testing
 ENV APP_ENV=test
-ENV HF_HOME=/huggingface-cache
 
 # Keep container running for exec commands
 ENTRYPOINT ["tail", "-f", "/dev/null"]

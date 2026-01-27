@@ -26,7 +26,7 @@ The `pii:discover` command scans database tables for Personally Identifiable Inf
 
 | File                                  | Changes                                                        |
 | ------------------------------------- | -------------------------------------------------------------- |
-| `docker-compose.test.yaml`            | Added `php-test` service and `huggingface-cache` volume        |
+| `docker-compose.test.yaml`            | Added `php-test` service                                       |
 | `composer.json`                       | Added `tests-docker`, `tests-pii`, `docker-test-build` scripts |
 | `tests/Fixtures/DatabaseFixtures.php` | Added `pii_samples` table with known PII data                  |
 
@@ -86,7 +86,7 @@ composer tests-pii
 ### Communication Flow
 
 1. **PHP Command** starts the Python subprocess
-2. **Python script** loads the GLiNER-PII model (~2GB, cached in volume)
+2. **Python script** loads the GLiNER-PII model (~2GB)
 3. For each table:
     - PHP queries random sample rows from database
     - PHP sends data to Python via NDJSON (newline-delimited JSON)
@@ -182,10 +182,6 @@ The `php-test` container includes:
 - Python 3 with GLiNER and PyTorch (CPU version)
 - Composer for PHP dependencies
 
-### HuggingFace Model Cache
-
-The `huggingface-cache` volume persists the GLiNER model download (~2GB) across test runs, avoiding repeated downloads.
-
 ### Building the Test Image
 
 ```bash
@@ -233,7 +229,7 @@ pip install -r scripts/requirements.txt
 
 ### Model Download Slow
 
-The first run downloads the GLiNER-PII model (~2GB). This is cached in the `huggingface-cache` volume for subsequent runs.
+The first run downloads the GLiNER-PII model (~2GB).
 
 ### GPU vs CPU
 

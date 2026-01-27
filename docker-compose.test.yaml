@@ -65,12 +65,10 @@ services:
             dockerfile: Dockerfile.test
         volumes:
             - .:/app
-            - huggingface-cache:/huggingface-cache
         environment:
             - APP_ENV=test
             - DATABASE_CONFIG_FILE=databases.test.yaml
             - POSTGRES_DSN=postgresql://test_user:test_password@postgres:5432/mcp_test
-            - HF_HOME=/huggingface-cache
         depends_on:
             mysql:
                 condition: service_healthy
@@ -79,6 +77,4 @@ services:
             sqlserver:
                 condition: service_healthy
 
-volumes:
-    huggingface-cache:
-        name: mcp-huggingface-cache
+

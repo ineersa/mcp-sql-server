@@ -7,7 +7,6 @@ namespace App\Tests\Command;
 use App\Command\PIIDiscoveryCommand;
 use App\Service\DoctrineConfigLoader;
 use App\Service\PIIAnalyzerService;
-use App\Tests\Fixtures\DatabaseFixtures;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -74,107 +73,74 @@ final class PIIDiscoveryCommandTest extends TestCase
     #[Test]
     public function itDetectsPiiInPiiSamplesTable(): void
     {
-        // Setup fixtures in SQLite
-        $connection = $this->configLoader->getConnection('local');
-        DatabaseFixtures::teardown($connection);
-        DatabaseFixtures::setup($connection);
+        $this->commandTester->execute([
+            '--connection' => 'local',
+            '--tables' => 'pii_samples',
+        ]);
 
-        try {
-            $this->commandTester->execute([
-                '--connection' => 'local',
-                '--tables' => 'pii_samples',
-            ]);
+        $display = $this->commandTester->getDisplay();
 
-            $display = $this->commandTester->getDisplay();
+        // Check command succeeded
+        $this->assertSame(0, $this->commandTester->getStatusCode(), 'Command failed: '.$display);
 
-            // Check command succeeded
-            $this->assertSame(0, $this->commandTester->getStatusCode(), 'Command failed: '.$display);
+        // Check that PII was detected in expected columns
+        $this->assertStringContainsString('pii_samples:', $display);
 
-            // Check that PII was detected in expected columns
-            $this->assertStringContainsString('pii_samples:', $display);
+        // Verify that the email column was detected with email PII type
+        $this->assertStringContainsString('customer_email:', $display);
+        $this->assertStringContainsString('email', $display);
 
-            // Verify that the email column was detected with email PII type
-            $this->assertStringContainsString('customer_email:', $display);
-            $this->assertStringContainsString('email', $display);
-
-            // Verify that at least some columns were detected (exact labels may vary by model version)
-            // The model should detect most of: customer_name, phone, ip_address, etc.
-            $this->assertStringContainsString('customer_name:', $display);
-        } finally {
-            DatabaseFixtures::teardown($connection);
-        }
+        // Verify that at least some columns were detected (exact labels may vary by model version)
+        // The model should detect most of: customer_name, phone, ip_address, etc.
+        $this->assertStringContainsString('customer_name:', $display);
     }
 
     #[Test]
     public function itRespectsTableFilter(): void
     {
-        $connection = $this->configLoader->getConnection('local');
-        DatabaseFixtures::teardown($connection);
-        DatabaseFixtures::setup($connection);
+        $this->commandTester->execute([
+            '--connection' => 'local',
+            '--tables' => 'users',
+        ]);
 
-        try {
-            $this->commandTester->execute([
-                '--connection' => 'local',
-                '--tables' => 'users',
-            ]);
+        $display = $this->commandTester->getDisplay();
 
-            $display = $this->commandTester->getDisplay();
+        $this->assertSame(0, $this->commandTester->getStatusCode());
 
-            $this->assertSame(0, $this->commandTester->getStatusCode());
-
-            // Should process users table
-            if (str_contains($display, 'users:')) {
-                $this->assertStringContainsString('email', $display);
-            }
-
-            // Should NOT process pii_samples since it was filtered out
-            $this->assertStringNotContainsString('pii_samples:', $display);
-        } finally {
-            DatabaseFixtures::teardown($connection);
+        // Should process users table
+        if (str_contains($display, 'users:')) {
+            $this->assertStringContainsString('email', $display);
         }
+
+        // Should NOT process pii_samples since it was filtered out
+        $this->assertStringNotContainsString('pii_samples:', $display);
     }
 
     #[Test]
     public function itHandlesTableWithFewRecords(): void
     {
-        $connection = $this->configLoader->getConnection('local');
-        DatabaseFixtures::teardown($connection);
-        DatabaseFixtures::setup($connection);
+        // Request more samples than exist (only 3 pii_samples records)
+        $this->commandTester->execute([
+            '--connection' => 'local',
+            '--tables' => 'pii_samples',
+            '--sample-size' => '100',
+        ]);
 
-        try {
-            // Request more samples than exist (only 3 pii_samples records)
-            $this->commandTester->execute([
-                '--connection' => 'local',
-                '--tables' => 'pii_samples',
-                '--sample-size' => '100',
-            ]);
-
-            // Should still work with available records
-            $this->assertSame(0, $this->commandTester->getStatusCode());
-        } finally {
-            DatabaseFixtures::teardown($connection);
-        }
+        // Should still work with available records
+        $this->assertSame(0, $this->commandTester->getStatusCode());
     }
 
     #[Test]
     public function itRespectsConfidenceThreshold(): void
     {
-        $connection = $this->configLoader->getConnection('local');
-        DatabaseFixtures::teardown($connection);
-        DatabaseFixtures::setup($connection);
+        // Very high threshold should reduce false positives
+        $this->commandTester->execute([
+            '--connection' => 'local',
+            '--tables' => 'pii_samples',
+            '--confidence-threshold' => '0.99',
+        ]);
 
-        try {
-            // Very high threshold should reduce false positives
-            $this->commandTester->execute([
-                '--connection' => 'local',
-                '--tables' => 'pii_samples',
-                '--confidence-threshold' => '0.99',
-            ]);
-
-            $this->assertSame(0, $this->commandTester->getStatusCode());
-        } finally {
-            DatabaseFixtures::teardown($connection);
-        }
+        $this->assertSame(0, $this->commandTester->getStatusCode());
     }
 
     #[Test]
