@@ -155,7 +155,7 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
 
 
 def redact_request(model, request: dict[str, Any]) -> dict[str, Any]:
-    """Process a redact request and return rows with PII values replaced."""
+    """Process a redact request and return rows with PII values replaced using batch processing."""
     columns = request.get("columns", [])
     data = request.get("data", [])
     threshold = request.get("threshold", 0.9)
@@ -166,37 +166,61 @@ def redact_request(model, request: dict[str, Any]) -> dict[str, Any]:
     num_columns = len(columns)
     redacted_data = [list(row) for row in data]
 
-    # Process each cell
+    # 1. Collect all non-empty cells with their positions
+    # List of tuples: (row_idx, col_idx, text_value)
+    tasks: list[tuple[int, int, str]] = []
+
     for row_idx, row in enumerate(data):
         for col_idx, value in enumerate(row):
             if col_idx >= num_columns or value is None:
                 continue
 
             val_str = str(value)
-            if not val_str.strip():
-                continue
+            if val_str.strip():
+                tasks.append((row_idx, col_idx, val_str))
 
-            try:
-                entities = model.predict_entities(val_str, ALL_LABELS, threshold=threshold)
+    if not tasks:
+        return {"data": redacted_data}
 
-                if entities:
-                    # Sort entities by start position descending (to replace from end)
-                    entities_sorted = sorted(entities, key=lambda e: e.get("start", 0), reverse=True)
+    # 2. Process in batches
+    BATCH_SIZE = 256
 
-                    for entity in entities_sorted:
-                        start = entity.get("start", 0)
-                        end = entity.get("end", 0)
-                        label = entity.get("label", "unknown")
-                        score = entity.get("score", 0)
+    for i in range(0, len(tasks), BATCH_SIZE):
+        batch_tasks = tasks[i:i + BATCH_SIZE]
+        batch_texts = [t[2] for t in batch_tasks]
 
-                        if score >= threshold and start < end:
-                            val_str = val_str[:start] + f"[REDACTED_{label}]" + val_str[end:]
+        try:
+            # Predict batch
+            if hasattr(model, 'batch_predict_entities'):
+                batch_predictions = model.batch_predict_entities(batch_texts, ALL_LABELS, threshold=threshold)
+            else:
+                batch_predictions = [model.predict_entities(t, ALL_LABELS, threshold=threshold) for t in batch_texts]
 
-                    redacted_data[row_idx][col_idx] = val_str
+            # Apply redactions
+            for j, entities in enumerate(batch_predictions):
+                if not entities:
+                    continue
 
-            except Exception:
-                # Keep original value if prediction fails
-                continue
+                row_idx, col_idx, val_str = batch_tasks[j]
+
+                # Sort entities by start position descending (to replace from end)
+                entities_sorted = sorted(entities, key=lambda e: e.get("start", 0), reverse=True)
+
+                for entity in entities_sorted:
+                    start = entity.get("start", 0)
+                    end = entity.get("end", 0)
+                    label = entity.get("label", "unknown")
+                    score = entity.get("score", 0)
+
+                    if score >= threshold and start < end:
+                        val_str = val_str[:start] + f"[REDACTED_{label}]" + val_str[end:]
+
+                redacted_data[row_idx][col_idx] = val_str
+
+        except Exception as e:
+            # Log error but continue with next batch
+            sys.stderr.write(f"Batch redaction error: {str(e)}\n")
+            continue
 
     return {"data": redacted_data}
 
