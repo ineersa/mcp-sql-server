@@ -1,0 +1,29 @@
+{
+    "content": [
+        {
+            "type": "text",
+            "text": "## Query 1\n```sql\nSELECT * FROM pii_samples WHERE id = 1\n```\n### Count\n1\n\n### Rows\n| id | customer_name | customer_email | phone | ssn | credit_card | ip_address | notes |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | John Smith | john.smith@example.com | (555) 123-4567 | 123-45-6789 | 4532015112830366 | 192.168.1.100 | This is a very long note that should exceed the limit of 200 characters to test the truncation functionality in the QueryTool. We need to make sure that when multiple rows are returned, this text is replaced with a placeholder, but when a single row is returned, the full text is preserved correctly. |\n\n"
+        }
+    ],
+    "structuredContent": {
+        "results": [
+            {
+                "query": "SELECT * FROM pii_samples WHERE id = 1",
+                "count": 1,
+                "rows": [
+                    {
+                        "id": 1,
+                        "customer_name": "John Smith",
+                        "customer_email": "john.smith@example.com",
+                        "phone": "(555) 123-4567",
+                        "ssn": "123-45-6789",
+                        "credit_card": "4532015112830366",
+                        "ip_address": "192.168.1.100",
+                        "notes": "This is a very long note that should exceed the limit of 200 characters to test the truncation functionality in the QueryTool. We need to make sure that when multiple rows are returned, this text is replaced with a placeholder, but when a single row is returned, the full text is preserved correctly."
+                    }
+                ]
+            }
+        ]
+    },
+    "isError": false
+}

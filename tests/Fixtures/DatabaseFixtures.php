@@ -125,7 +125,7 @@ final class DatabaseFixtures
                 'ssn' => '123-45-6789',
                 'credit_card' => '4532015112830366',
                 'ip_address' => '192.168.1.100',
-                'notes' => 'Regular customer since 2020',
+                'notes' => 'This is a very long note that should exceed the limit of 200 characters to test the truncation functionality in the QueryTool. We need to make sure that when multiple rows are returned, this text is replaced with a placeholder, but when a single row is returned, the full text is preserved correctly.',
             ],
             [
                 'id' => 2,

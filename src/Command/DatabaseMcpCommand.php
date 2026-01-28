@@ -52,7 +52,7 @@ class DatabaseMcpCommand extends Command
 
             if ($this->doctrineConfigLoader->hasAnyPiiEnabled()) {
                 $this->logger->info('PII protection enabled, starting GLiNER analyzer...');
-                $this->piiAnalyzerService->start();
+                $this->piiAnalyzerService->start(waitForReady: false);
             }
 
             $builder = Server::builder()

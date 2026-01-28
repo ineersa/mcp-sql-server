@@ -1,0 +1,49 @@
+{
+    "content": [
+        {
+            "type": "text",
+            "text": "## Query 1\n```sql\nSELECT * FROM pii_samples ORDER BY id LIMIT 10\n```\n### Count\n3\n\n### Rows\n| id | customer_name | customer_email | phone | ssn | credit_card | ip_address | notes |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | John Smith | john.smith@example.com | (555) 123-4567 | 123-45-6789 | 4532015112830366 | 192.168.1.100 | <TEXT> |\n| 2 | Jane Doe | jane.doe@company.org | +1-555-987-6543 | 987-65-4321 | 5425233430109903 | 10.0.0.50 | <TEXT> |\n| 3 | Robert Johnson | rjohnson@email.net | 555.456.7890 | 456-78-9012 | 374245455400126 | 172.16.0.1 | <TEXT> |\n\n"
+        }
+    ],
+    "structuredContent": {
+        "results": [
+            {
+                "query": "SELECT * FROM pii_samples ORDER BY id LIMIT 10",
+                "count": 3,
+                "rows": [
+                    {
+                        "id": 1,
+                        "customer_name": "John Smith",
+                        "customer_email": "john.smith@example.com",
+                        "phone": "(555) 123-4567",
+                        "ssn": "123-45-6789",
+                        "credit_card": "4532015112830366",
+                        "ip_address": "192.168.1.100",
+                        "notes": "<TEXT>"
+                    },
+                    {
+                        "id": 2,
+                        "customer_name": "Jane Doe",
+                        "customer_email": "jane.doe@company.org",
+                        "phone": "+1-555-987-6543",
+                        "ssn": "987-65-4321",
+                        "credit_card": "5425233430109903",
+                        "ip_address": "10.0.0.50",
+                        "notes": "<TEXT>"
+                    },
+                    {
+                        "id": 3,
+                        "customer_name": "Robert Johnson",
+                        "customer_email": "rjohnson@email.net",
+                        "phone": "555.456.7890",
+                        "ssn": "456-78-9012",
+                        "credit_card": "374245455400126",
+                        "ip_address": "172.16.0.1",
+                        "notes": "<TEXT>"
+                    }
+                ]
+            }
+        ]
+    },
+    "isError": false
+}

@@ -1,30 +1,34 @@
 # Database MCP Server - Production Dockerfile
 # Supports: MySQL, PostgreSQL, SQLite, SQL Server
+# Includes GLiNER for PII detection
 
-FROM php:8.4-cli-alpine
+FROM php:8.4-cli-bookworm
 
 LABEL maintainer="Illia Vasylevskyi <ineersa@gmail.com>"
 LABEL description="MCP server implementation to work with SQL databases"
 LABEL version="0.0.2"
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # SSL certificates for HTTPS
     ca-certificates \
     # Required for pdo_pgsql
     libpq-dev \
-    postgresql-dev \
     # Required for SQL Server driver
     unixodbc-dev \
-    gnupg \
+    gnupg2 \
     curl \
     # Required for Composer
     git \
     unzip \
     # Required for SQLite
-    sqlite-dev \
-    # For healthchecks
-    bash
+    libsqlite3-dev \
+    # Python 3.11 for GLiNER (prebuilt wheels available)
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    # Cleanup apt cache in same layer
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions for MySQL, PostgreSQL, SQLite
 RUN docker-php-ext-install \
@@ -35,33 +39,36 @@ RUN docker-php-ext-install \
     opcache
 
 # Install SQL Server ODBC drivers and PHP extension
-# Microsoft provides Alpine packages for ODBC driver (version 18.6.1.1)
 RUN set -eux; \
     # Determine architecture
-    case $(uname -m) in \
-        x86_64) architecture="amd64" ;; \
-        aarch64) architecture="arm64" ;; \
+    case $(dpkg --print-architecture) in \
+        amd64) architecture="amd64" ;; \
+        arm64) architecture="arm64" ;; \
         *) echo "Unsupported architecture"; exit 1 ;; \
     esac; \
-    # Install required packages for building sqlsrv
-    apk add --no-cache --virtual .build-deps \
-        autoconf \
-        g++ \
-        make \
-    # Microsoft ODBC Driver for SQL Server (Alpine)
-    # Using -k since Microsoft's SSL chain may not be in Alpine's ca-certificates
-    && curl -kO https://download.microsoft.com/download/9dcab408-e0d4-4571-a81a-5a0951e3445f/msodbcsql18_18.6.1.1-1_${architecture}.apk \
-    && curl -kO https://download.microsoft.com/download/b60bb8b6-d398-4819-9950-2e30cf725fb0/mssql-tools18_18.6.1.1-1_${architecture}.apk \
-    # Install the packages (allow untrusted for Microsoft packages)
-    && apk add --allow-untrusted msodbcsql18_18.6.1.1-1_${architecture}.apk \
-    && apk add --allow-untrusted mssql-tools18_18.6.1.1-1_${architecture}.apk \
+    # Add Microsoft repository key
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+    && curl https://packages.microsoft.com/config/debian/12/prod.list | tee /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 \
+    # Install build deps for pecl
+    && apt-get install -y --no-install-recommends autoconf g++ make \
     # Install pdo_sqlsrv extension
     && pecl install pdo_sqlsrv \
     && docker-php-ext-enable pdo_sqlsrv \
     # Cleanup
-    && rm -f msodbcsql18_18.6.1.1-1_${architecture}.apk mssql-tools18_18.6.1.1-1_${architecture}.apk \
-    && apk del .build-deps \
-    && rm -rf /tmp/pear
+    && apt-get purge -y autoconf g++ make \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/pear
+
+# Make python3.11 the default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
+# Install Python dependencies for GLiNER (CPU-only PyTorch for smaller image)
+# Using prebuilt wheels from PyTorch index for fast installation
+RUN pip3 install --break-system-packages --no-cache-dir \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip3 install --break-system-packages --no-cache-dir gliner>=0.2.0
 
 # Configure OPcache for production
 RUN { \
@@ -96,6 +103,9 @@ COPY . ./
 
 # Generate optimized autoloader
 RUN composer dump-autoload --optimize --classmap-authoritative
+
+# Copy GLiNER script
+COPY scripts/gliner_pii.py /app/scripts/gliner_pii.py
 
 # Create log directory
 RUN mkdir -p /tmp/database-mcp/log

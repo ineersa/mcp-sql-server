@@ -52,6 +52,37 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
             ];
         }
 
+        // Add truncation tests (using local connection)
+        $baseTests['Query Truncation - Multi Row'] = [
+            'method' => 'tools/call',
+            'options' => [
+                'toolName' => 'query',
+                'toolArgs' => [
+                    'connection' => 'local',
+                    'query' => 'SELECT * FROM pii_samples ORDER BY id LIMIT 10',
+                ],
+                'envVars' => [
+                    'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                ],
+            ],
+            'testName' => 'truncation_multi',
+        ];
+
+        $baseTests['Query Truncation - Single Row'] = [
+            'method' => 'tools/call',
+            'options' => [
+                'toolName' => 'query',
+                'toolArgs' => [
+                    'connection' => 'local',
+                    'query' => 'SELECT * FROM pii_samples WHERE id = 1',
+                ],
+                'envVars' => [
+                    'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                ],
+            ],
+            'testName' => 'truncation_single',
+        ];
+
         return $baseTests;
     }
 

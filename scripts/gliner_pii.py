@@ -79,13 +79,6 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
     tasks: list[tuple[str, str]] = []
 
     num_columns = len(columns)
-
-    # Extract values for each column and add to tasks (flat list)
-    # We maintain column grouping implicitly by iterating columns outer logic if desired,
-    # but here we iterate cells.
-
-    # To keep context grouped by column (usually preferred for batching similar text),
-    # we collect by column first.
     column_values: dict[int, list[str]] = {i: [] for i in range(num_columns)}
 
     for row in data:
@@ -95,7 +88,7 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
                 if val_str.strip():
                     column_values[i].append(val_str)
 
-    # Build the task list ordered by column
+    # Build the task list
     for i, column_name in enumerate(columns):
         for val in column_values.get(i, []):
             tasks.append((column_name, val))
@@ -107,8 +100,11 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
             "samples": {}
         }
 
+    # OPTIMIZATION: Sort tasks by text length to minimize padding overhead in batches
+    tasks.sort(key=lambda x: len(x[1]))
+
     # 2. Process in large batches
-    BATCH_SIZE = 256
+    BATCH_SIZE = 128  # Reduced batch size to safely handle potentially long texts with sorting
 
     for i in range(0, len(tasks), BATCH_SIZE):
         batch_tasks = tasks[i:i + BATCH_SIZE]
@@ -135,7 +131,7 @@ def process_request(model, request: dict[str, Any]) -> dict[str, Any]:
 
                         results[column_name].add(label)
 
-                        # Save first sample detected
+                        # Save first sample detected (overwrite previous if any, simplified)
                         if column_name not in samples:
                             samples[column_name] = text[:50]
 
@@ -176,25 +172,29 @@ def redact_request(model, request: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             val_str = str(value)
+            # Only process if it has content
             if val_str.strip():
                 tasks.append((row_idx, col_idx, val_str))
 
     if not tasks:
         return {"data": redacted_data}
 
+    # OPTIMIZATION: Sort tasks by text length to minimize padding overhead
+    tasks.sort(key=lambda x: len(x[2]))
+
     # 2. Process in batches
-    BATCH_SIZE = 256
+    BATCH_SIZE = 128
 
     for i in range(0, len(tasks), BATCH_SIZE):
         batch_tasks = tasks[i:i + BATCH_SIZE]
-        batch_texts = [t[2] for t in batch_tasks]
+        messages = [t[2] for t in batch_tasks]
 
         try:
             # Predict batch
             if hasattr(model, 'batch_predict_entities'):
-                batch_predictions = model.batch_predict_entities(batch_texts, ALL_LABELS, threshold=threshold)
+                batch_predictions = model.batch_predict_entities(messages, ALL_LABELS, threshold=threshold)
             else:
-                batch_predictions = [model.predict_entities(t, ALL_LABELS, threshold=threshold) for t in batch_texts]
+                batch_predictions = [model.predict_entities(t, ALL_LABELS, threshold=threshold) for t in messages]
 
             # Apply redactions
             for j, entities in enumerate(batch_predictions):
@@ -213,12 +213,13 @@ def redact_request(model, request: dict[str, Any]) -> dict[str, Any]:
                     score = entity.get("score", 0)
 
                     if score >= threshold and start < end:
+                        # Use character replacement to avoid offset shifts if multiple replacements?
+                        # No, we replace from end (reverse=True), so string offsets remain valid for earlier segments.
                         val_str = val_str[:start] + f"[REDACTED_{label}]" + val_str[end:]
 
                 redacted_data[row_idx][col_idx] = val_str
 
         except Exception as e:
-            # Log error but continue with next batch
             sys.stderr.write(f"Batch redaction error: {str(e)}\n")
             continue
 

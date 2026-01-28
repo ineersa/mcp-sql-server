@@ -24,6 +24,11 @@ final class PIIAnalyzerService
     /** @var resource|null */
     private $stdout;
 
+    /** @var resource|null */
+    private $stderr;
+
+    private bool $isReady = false;
+
     public function __construct(
         private LoggerInterface $logger,
         private string $pythonBinary = 'python3',
@@ -40,7 +45,7 @@ final class PIIAnalyzerService
      *
      * @throws \RuntimeException if process fails to start or model fails to load
      */
-    public function start(): void
+    public function start(bool $waitForReady = true): void
     {
         if (null !== $this->process && \is_resource($this->process)) {
             $status = proc_get_status($this->process);
@@ -75,57 +80,19 @@ final class PIIAnalyzerService
             throw new \RuntimeException('Failed to start GLiNER Python process');
         }
 
+        $this->process = $proc;
         $this->stdin = $pipes[0];
         $this->stdout = $pipes[1];
-        $stderr = $pipes[2];
+        $this->stderr = $pipes[2];
 
         // Make stdout non-blocking for reading with timeout
         stream_set_blocking($this->stdout, false);
 
-        // Wait for ready signal (no timeout - model download may take a while, user can Ctrl+C)
-        $isReady = false;
-
-        while (true) {
-            $line = $this->readLine(1);
-
-            if (null !== $line) {
-                $response = json_decode($line, true);
-
-                if (\is_array($response)) {
-                    if (isset($response['error'])) {
-                        $stderrContent = stream_get_contents($stderr);
-                        fclose($stderr);
-                        throw new \RuntimeException('GLiNER error: '.$response['error'].($stderrContent ? "\n".$stderrContent : ''));
-                    }
-
-                    if (isset($response['status'])) {
-                        if ('ready' === $response['status']) {
-                            $isReady = true;
-                            break;
-                        }
-                        if ('loading' === $response['status']) {
-                            $this->logger->info('GLiNER model is loading...');
-                        }
-                        if ('downloading' === $response['status']) {
-                            $this->logger->info('GLiNER model is downloading (first run may take a while)...');
-                        }
-                    }
-                }
-            }
-
-            usleep(100000); // 100ms
+        if ($waitForReady) {
+            $this->waitForReady();
+        } else {
+            $this->logger->info('GLiNER started in background, waiting for readiness...');
         }
-
-        fclose($stderr);
-
-        if (!$isReady) {
-            proc_terminate($proc);
-            throw new \RuntimeException('GLiNER process failed to become ready');
-        }
-
-        // Store the process resource to keep it alive
-        $this->process = $proc;
-        $this->logger->info('GLiNER PII analyzer ready');
     }
 
     /**
@@ -142,6 +109,8 @@ final class PIIAnalyzerService
      */
     public function analyze(string $tableName, array $columns, array $data, float $threshold = 0.9): array
     {
+        $this->waitForReady();
+
         if (null === $this->stdin || null === $this->stdout || !\is_resource($this->stdin) || !\is_resource($this->stdout)) {
             throw new \RuntimeException('GLiNER process not started or not running. Call start() first.');
         }
@@ -196,6 +165,8 @@ final class PIIAnalyzerService
         if ([] === $rows) {
             return [];
         }
+
+        $this->waitForReady();
 
         if (null === $this->stdin || null === $this->stdout || !\is_resource($this->stdin) || !\is_resource($this->stdout)) {
             throw new \RuntimeException('GLiNER process not started or not running. Call start() first.');
@@ -266,6 +237,8 @@ final class PIIAnalyzerService
         }
         $this->stdout = null;
 
+        $this->closeStderr();
+
         if (null !== $this->process && \is_resource($this->process)) {
             proc_close($this->process);
         }
@@ -280,6 +253,58 @@ final class PIIAnalyzerService
     public function isRunning(): bool
     {
         return null !== $this->stdin && null !== $this->stdout;
+    }
+
+    private function waitForReady(): void
+    {
+        if ($this->isReady) {
+            return;
+        }
+
+        $this->logger->info('Waiting for GLiNER to become ready...');
+
+        // Wait for ready signal (no timeout - model download may take a while, user can Ctrl+C)
+        while (true) {
+            $line = $this->readLine(1);
+
+            if (null !== $line) {
+                $response = json_decode($line, true);
+
+                if (\is_array($response)) {
+                    if (isset($response['error'])) {
+                        $stderrContent = stream_get_contents($this->stderr);
+                        $this->closeStderr();
+                        throw new \RuntimeException('GLiNER error: '.$response['error'].($stderrContent ? "\n".$stderrContent : ''));
+                    }
+
+                    if (isset($response['status'])) {
+                        if ('ready' === $response['status']) {
+                            $this->isReady = true;
+                            break;
+                        }
+                        if ('loading' === $response['status']) {
+                            $this->logger->info('GLiNER model is loading...');
+                        }
+                        if ('downloading' === $response['status']) {
+                            $this->logger->info('GLiNER model is downloading (first run may take a while)...');
+                        }
+                    }
+                }
+            }
+
+            usleep(100000); // 100ms
+        }
+
+        $this->closeStderr();
+        $this->logger->info('GLiNER PII analyzer ready');
+    }
+
+    private function closeStderr(): void
+    {
+        if (null !== $this->stderr && \is_resource($this->stderr)) {
+            fclose($this->stderr);
+        }
+        $this->stderr = null;
     }
 
     private function getScriptPath(): string

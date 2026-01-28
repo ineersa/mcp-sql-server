@@ -28,6 +28,7 @@ RULES:
 1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.
 2. Check the connection type before writing the query - use correct syntax for that database.
 3. For more rows, use pagination with OFFSET.
+4. Large text columns (>200 chars) are truncated to "<TEXT>" in multi-row results. To view full text, Query MUST return exactly 1 row.
 
 Examples:
   MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;
@@ -62,6 +63,8 @@ DESCRIPTION;
             foreach ($queries as $singleQuery) {
                 $this->validateQuery($singleQuery);
                 $rows = $this->safeQueryExecutor->execute($conn, $singleQuery);
+
+                $rows = $this->truncateLongTextRows($rows);
 
                 if ($piiEnabled && [] !== $rows) {
                     $rows = $this->piiAnalyzerService->redact($rows);
@@ -248,6 +251,44 @@ DESCRIPTION;
         }
 
         return $queries;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function truncateLongTextRows(array $rows): array
+    {
+        if (\count($rows) <= 1) {
+            return $rows;
+        }
+
+        $longColumns = [];
+
+        // First pass: identify columns that have long text
+        foreach ($rows as $row) {
+            foreach ($row as $key => $value) {
+                if (\is_string($value) && \strlen($value) > 200) {
+                    $longColumns[$key] = true;
+                }
+            }
+        }
+
+        if ([] === $longColumns) {
+            return $rows;
+        }
+
+        // Second pass: redact those columns
+        foreach ($rows as &$row) {
+            foreach ($longColumns as $key => $_) {
+                if (isset($row[$key])) {
+                    $row[$key] = '<TEXT>';
+                }
+            }
+        }
+
+        return $rows;
     }
 
     /** @param array<int, array<string, mixed>> $results */
