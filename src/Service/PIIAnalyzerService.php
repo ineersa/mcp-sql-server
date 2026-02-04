@@ -45,7 +45,7 @@ final class PIIAnalyzerService
         $this->ensureModelLoaded();
 
         $columnTexts = $this->collectColumnTexts($columns, $data);
-        $labels = PIILabel::getAllValues();
+        $labels = $this->configLoader->getLabels() ?? PIILabel::getAllValues();
 
         /** @var array<string, list<string>> $results */
         $results = [];
@@ -97,7 +97,7 @@ final class PIIAnalyzerService
 
         $this->ensureModelLoaded();
 
-        $labels = PIILabel::getAllValues();
+        $labels = $this->configLoader->getLabels() ?? PIILabel::getAllValues();
         $columns = array_keys($rows[0]);
 
         // Build column-based text arrays for batch processing

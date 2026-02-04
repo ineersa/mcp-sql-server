@@ -20,6 +20,8 @@ final class DoctrineConfigLoader
     private ?string $tokenizerPath = null;
     private ?string $modelPath = null;
     private ?float $threshold = null;
+    /** @var list<string>|null */
+    private ?array $labels = null;
 
     public function __construct(
         private LoggerInterface $logger,
@@ -140,6 +142,12 @@ final class DoctrineConfigLoader
         return $this->threshold ?? 0.9;
     }
 
+    /** @return list<string>|null */
+    public function getLabels(): ?array
+    {
+        return $this->labels;
+    }
+
     private function getConfigFilePath(): string
     {
         $configFile = $_ENV['DATABASE_CONFIG_FILE'] ?? null;
@@ -240,6 +248,13 @@ final class DoctrineConfigLoader
 
         if (isset($piiConfig['threshold']) && is_numeric($piiConfig['threshold'])) {
             $this->threshold = (float) $piiConfig['threshold'];
+        }
+
+        if (isset($piiConfig['labels']) && \is_array($piiConfig['labels'])) {
+            $this->labels = array_values(array_filter(
+                $piiConfig['labels'],
+                static fn ($v): bool => \is_string($v)
+            ));
         }
 
         if ($this->hasAnyPiiEnabled() && !$this->hasPiiConfig()) {

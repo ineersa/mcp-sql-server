@@ -75,6 +75,18 @@ Since Python and other dependencies are **only available in the Docker container
 
 Once the containers are up (after running `composer tests` once), you can use the `composer test` command to run specific tests quickly without rebuilding/restarting containers.
 
+**IMPORTANT**: Before running `composer test`, you **MUST** reload fixtures to ensure database tables exist:
+
+```bash
+composer fixtures-reload
+```
+
+- **Reload database fixtures** (required before `composer test`):
+
+    ```bash
+    composer fixtures-reload
+    ```
+
 - **Run a specific test file**:
 
     ```bash

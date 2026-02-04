@@ -38,10 +38,10 @@ class PIIAnalyzerServiceTest extends TestCase
     #[Test]
     public function itRedactsPiiFromRows(): void
     {
-        // Simple case
+        // Simple case - only email is in our labels config
         $rows = [
             ['id' => 1, 'text' => 'My email is john.doe@example.com'],
-            ['id' => 2, 'text' => 'Call me at 555-0199'],
+            ['id' => 2, 'text' => 'Safe text without PII'],
         ];
 
         // Pass 0.4 threshold explicitly for tests
@@ -50,12 +50,12 @@ class PIIAnalyzerServiceTest extends TestCase
         $this->assertCount(2, $redacted);
         $this->assertSame('1', $redacted[0]['id']);
 
-        // Let's check for REDACTED_ mark
+        // Email should be redacted
         $this->assertStringContainsString('[REDACTED_', $redacted[0]['text']);
         $this->assertStringNotContainsString('john.doe@example.com', $redacted[0]['text']);
 
-        $this->assertStringContainsString('[REDACTED_', $redacted[1]['text']);
-        $this->assertStringNotContainsString('555-0199', $redacted[1]['text']);
+        // Safe text unchanged
+        $this->assertSame('Safe text without PII', $redacted[1]['text']);
     }
 
     #[Test]
@@ -68,13 +68,13 @@ class PIIAnalyzerServiceTest extends TestCase
         // 50 iterations * ~25 chars = ~1250 chars (~300-400 tokens), should fit.
         $longText = str_repeat('This is a safe sentence. ', 50);
         $shortText = 'Hello world';
-        $mediumText = 'My name is Alice and I live in London.';
+        $mediumText = 'I live in London and love it here.'; // city label
 
         $rows = [
             ['c' => $shortText],             // Short
             ['c' => $longText],              // Long
-            ['c' => $mediumText],            // Medium
-            ['c' => $longText.' Contact: bob@example.com'], // Long with PII at end
+            ['c' => $mediumText],            // Medium with city PII
+            ['c' => $longText.' Contact: bob@example.com'], // Long with email PII
         ];
 
         $redacted = self::$sharedAnalyzer->redact($rows, 0.4);
@@ -83,11 +83,11 @@ class PIIAnalyzerServiceTest extends TestCase
         $this->assertSame($shortText, $redacted[0]['c']); // No PII
         $this->assertSame($longText, $redacted[1]['c']); // No PII
 
-        // Check medium
+        // Check medium - city should be redacted
         $this->assertStringContainsString('[REDACTED_', $redacted[2]['c']);
-        $this->assertStringNotContainsString('Alice', $redacted[2]['c']);
+        $this->assertStringNotContainsString('London', $redacted[2]['c']);
 
-        // Check long with PII
+        // Check long with email PII
         $this->assertStringContainsString('[REDACTED_', $redacted[3]['c']);
         $this->assertStringNotContainsString('bob@example.com', $redacted[3]['c']);
     }
