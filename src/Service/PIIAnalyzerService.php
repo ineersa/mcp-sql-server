@@ -4,95 +4,26 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Enum\PIILabel;
 use Psr\Log\LoggerInterface;
 
 /**
- * Manages Python GLiNER subprocess for PII detection.
+ * Manages GLiNER PII detection using the native PHP extension.
  *
- * Communicates via NDJSON (line-delimited JSON) on stdin/stdout.
+ * Uses the gliner-rs-php extension for fast ONNX-based inference.
+ *
+ * @see https://github.com/ineersa/gliner-rs-php
  */
 final class PIIAnalyzerService
 {
-    private const SCRIPT_PATH = 'scripts/gliner_pii.py';
+    private const int BATCH_SIZE = 128;
 
-    /** @var resource|null The process resource from proc_open */
-    private $process;
-
-    /** @var resource|null */
-    private $stdin;
-
-    /** @var resource|null */
-    private $stdout;
-
-    /** @var resource|null */
-    private $stderr;
-
-    private bool $isReady = false;
+    private ?\GlinerWrapper $gliner = null;
 
     public function __construct(
         private LoggerInterface $logger,
-        private string $pythonBinary = 'python3',
+        private DoctrineConfigLoader $configLoader,
     ) {
-    }
-
-    public function __destruct()
-    {
-        $this->stop();
-    }
-
-    /**
-     * Start the Python GLiNER subprocess.
-     *
-     * @throws \RuntimeException if process fails to start or model fails to load
-     */
-    public function start(bool $waitForReady = true): void
-    {
-        if (null !== $this->process && \is_resource($this->process)) {
-            $status = proc_get_status($this->process);
-            if ($status['running']) {
-                return;
-            }
-        }
-
-        $scriptPath = $this->getScriptPath();
-
-        if (!file_exists($scriptPath)) {
-            throw new \RuntimeException(\sprintf('GLiNER script not found: %s', $scriptPath));
-        }
-
-        $this->logger->info('Starting GLiNER PII analyzer...');
-
-        // Start the process with pipes for stdin/stdout
-        $descriptors = [
-            0 => ['pipe', 'r'], // stdin
-            1 => ['pipe', 'w'], // stdout
-            2 => ['pipe', 'w'], // stderr
-        ];
-
-        $proc = proc_open(
-            [$this->pythonBinary, $scriptPath],
-            $descriptors,
-            $pipes,
-            \dirname($scriptPath, 2)
-        );
-
-        if (!\is_resource($proc)) {
-            throw new \RuntimeException('Failed to start GLiNER Python process');
-        }
-
-        $this->process = $proc;
-        $this->stdin = $pipes[0];
-        $this->stdout = $pipes[1];
-        $this->stderr = $pipes[2];
-
-        // Make stdout non-blocking for reading with timeout
-        stream_set_blocking($this->stdout, false);
-
-        if ($waitForReady) {
-            $this->waitForReady();
-        } else {
-            $this->logger->info('GLiNER started in background, waiting for readiness...');
-        }
     }
 
     /**
@@ -109,45 +40,45 @@ final class PIIAnalyzerService
      */
     public function analyze(string $tableName, array $columns, array $data, float $threshold = 0.9): array
     {
-        $this->waitForReady();
-
-        if (null === $this->stdin || null === $this->stdout || !\is_resource($this->stdin) || !\is_resource($this->stdout)) {
-            throw new \RuntimeException('GLiNER process not started or not running. Call start() first.');
+        if ([] === $data || [] === $columns) {
+            return ['results' => [], 'samples' => []];
         }
 
-        $request = [
-            'action' => 'analyze',
-            'table' => $tableName,
-            'columns' => $columns,
-            'data' => $data,
-            'threshold' => $threshold,
-        ];
+        $this->ensureModelLoaded();
 
-        $this->writeLine(json_encode($request, \JSON_THROW_ON_ERROR));
+        $columnTexts = $this->collectColumnTexts($columns, $data);
+        $labels = PIILabel::getAllValues();
 
-        // Wait for response (no timeout - user can Ctrl+C if needed)
-        while (true) {
-            $line = $this->readLine(1);
+        /** @var array<string, list<string>> $results */
+        $results = [];
+        /** @var array<string, string> $samples */
+        $samples = [];
 
-            if (null !== $line) {
-                $response = json_decode($line, true);
-
-                if (!\is_array($response)) {
-                    throw new \RuntimeException('Invalid JSON response from GLiNER');
-                }
-
-                if (isset($response['error'])) {
-                    throw new \RuntimeException('GLiNER analysis error: '.$response['error']);
-                }
-
-                return [
-                    'results' => $response['results'] ?? [],
-                    'samples' => $response['samples'] ?? [],
-                ];
+        foreach ($columns as $i => $columnName) {
+            $texts = $columnTexts[$i] ?? [];
+            if ([] === $texts) {
+                continue;
             }
 
-            usleep(50000); // 50ms
+            try {
+                $columnLabels = $this->analyzeTexts($texts, $labels, $threshold);
+
+                if ([] !== $columnLabels) {
+                    $results[$columnName] = array_keys($columnLabels);
+                    sort($results[$columnName]);
+
+                    // Store first sample for this column
+                    $samples[$columnName] = substr($texts[array_key_first($columnLabels)] ?? $texts[0], 0, 50);
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('GLiNER batch prediction failed for column', [
+                    'column' => $columnName,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+
+        return ['results' => $results, 'samples' => $samples];
     }
 
     /**
@@ -166,188 +97,204 @@ final class PIIAnalyzerService
             return [];
         }
 
-        $this->waitForReady();
+        $this->ensureModelLoaded();
 
-        if (null === $this->stdin || null === $this->stdout || !\is_resource($this->stdin) || !\is_resource($this->stdout)) {
-            throw new \RuntimeException('GLiNER process not started or not running. Call start() first.');
-        }
-
+        $labels = PIILabel::getAllValues();
         $columns = array_keys($rows[0]);
-        $data = array_map('array_values', $rows);
 
-        $request = [
-            'action' => 'redact',
-            'columns' => $columns,
-            'data' => $data,
-            'threshold' => $threshold,
-        ];
+        // Build column-based text arrays for batch processing
+        /** @var array<string, list<string>> $columnTexts */
+        $columnTexts = [];
+        /** @var array<string, list<int>> $columnRowIndices */
+        $columnRowIndices = [];
 
-        $this->writeLine(json_encode($request, \JSON_THROW_ON_ERROR));
-
-        while (true) {
-            $line = $this->readLine(1);
-
-            if (null !== $line) {
-                $response = json_decode($line, true);
-
-                if (!\is_array($response)) {
-                    throw new \RuntimeException('Invalid JSON response from GLiNER');
+        foreach ($rows as $rowIdx => $row) {
+            foreach ($columns as $colName) {
+                $value = $row[$colName] ?? null;
+                if (null !== $value && '' !== trim((string) $value)) {
+                    $columnTexts[$colName][] = (string) $value;
+                    $columnRowIndices[$colName][] = $rowIdx;
                 }
+            }
+        }
 
-                if (isset($response['error'])) {
-                    throw new \RuntimeException('GLiNER redaction error: '.$response['error']);
-                }
+        $redactedRows = $rows;
 
-                $redactedData = $response['data'] ?? [];
-                $result = [];
-
-                foreach ($redactedData as $rowData) {
-                    $row = [];
-                    foreach ($columns as $i => $col) {
-                        $row[$col] = $rowData[$i] ?? null;
-                    }
-                    $result[] = $row;
-                }
-
-                return $result;
+        foreach ($columns as $colName) {
+            $texts = $columnTexts[$colName] ?? [];
+            if ([] === $texts) {
+                continue;
             }
 
-            usleep(50000);
-        }
-    }
-
-    /**
-     * Stop the Python subprocess gracefully.
-     */
-    public function stop(): void
-    {
-        if (null !== $this->stdin && \is_resource($this->stdin)) {
             try {
-                $this->writeLine(json_encode(['action' => 'shutdown']));
-            } catch (\Throwable) {
-                // Ignore write errors during shutdown
+                $redactedTexts = $this->redactTexts($texts, $labels, $threshold);
+                $rowIndices = $columnRowIndices[$colName];
+
+                foreach ($redactedTexts as $i => $redactedText) {
+                    $redactedRows[$rowIndices[$i]][$colName] = $redactedText;
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('GLiNER batch redaction failed for column', [
+                    'column' => $colName,
+                    'error' => $e->getMessage(),
+                ]);
             }
-
-            fclose($this->stdin);
         }
-        $this->stdin = null;
 
-        if (null !== $this->stdout && \is_resource($this->stdout)) {
-            fclose($this->stdout);
-        }
-        $this->stdout = null;
-
-        $this->closeStderr();
-
-        if (null !== $this->process && \is_resource($this->process)) {
-            proc_close($this->process);
-        }
-        $this->process = null;
-
-        $this->logger->info('GLiNER PII analyzer stopped');
+        return $redactedRows;
     }
 
     /**
-     * Check if the analyzer is running.
+     * Collect texts from data rows grouped by column index.
+     *
+     * @param list<string>      $columns Column names
+     * @param list<list<mixed>> $data    Row data
+     *
+     * @return array<int, list<string>> Texts grouped by column index
      */
-    public function isRunning(): bool
+    private function collectColumnTexts(array $columns, array $data): array
     {
-        return null !== $this->stdin && null !== $this->stdout;
+        /** @var array<int, list<string>> $columnTexts */
+        $columnTexts = [];
+        $numColumns = \count($columns);
+
+        foreach ($data as $row) {
+            foreach ($row as $i => $value) {
+                if ($i >= $numColumns) {
+                    continue;
+                }
+                $text = null !== $value ? (string) $value : '';
+                if ('' !== trim($text)) {
+                    $columnTexts[$i][] = $text;
+                }
+            }
+        }
+
+        return $columnTexts;
     }
 
-    private function waitForReady(): void
+    /**
+     * Analyze texts and return detected labels with sample indices.
+     *
+     * @param list<string> $texts     Texts to analyze
+     * @param list<string> $labels    PII labels to detect
+     * @param float        $threshold Confidence threshold
+     *
+     * @return array<string, int> Map of label => first sample index
+     */
+    private function analyzeTexts(array $texts, array $labels, float $threshold): array
     {
-        if ($this->isReady) {
+        /** @var array<string, int> $detectedLabels */
+        $detectedLabels = [];
+
+        foreach (array_chunk($texts, self::BATCH_SIZE) as $batchOffset => $batchTexts) {
+            $predictions = $this->gliner->predictBatch($batchTexts, $labels);
+
+            foreach ($predictions as $textIdx => $entities) {
+                foreach ($entities as $entity) {
+                    $score = $entity['score'] ?? 0.0;
+                    $label = $entity['label'] ?? '';
+
+                    if ($score >= $threshold && '' !== $label && !isset($detectedLabels[$label])) {
+                        $detectedLabels[$label] = ($batchOffset * self::BATCH_SIZE) + $textIdx;
+                    }
+                }
+            }
+        }
+
+        return $detectedLabels;
+    }
+
+    /**
+     * Redact PII from texts.
+     *
+     * @param list<string> $texts     Texts to redact
+     * @param list<string> $labels    PII labels to detect
+     * @param float        $threshold Confidence threshold
+     *
+     * @return list<string> Redacted texts
+     */
+    private function redactTexts(array $texts, array $labels, float $threshold): array
+    {
+        $redacted = $texts;
+
+        foreach (array_chunk($texts, self::BATCH_SIZE, true) as $batchOffset => $batchTexts) {
+            $batchTextsList = array_values($batchTexts);
+            $batchKeys = array_keys($batchTexts);
+
+            $predictions = $this->gliner->predictBatch($batchTextsList, $labels);
+
+            foreach ($predictions as $i => $entities) {
+                $filtered = array_filter(
+                    $entities,
+                    static fn (array $e): bool => $e['score'] >= $threshold
+                );
+
+                if ([] === $filtered) {
+                    continue;
+                }
+
+                // Sort by start position descending to replace from end to start
+                usort($filtered, static fn (array $a, array $b): int => $b['start'] <=> $a['start']);
+
+                $text = $batchTextsList[$i];
+                foreach ($filtered as $entity) {
+                    $start = $entity['start'];
+                    $end = $entity['end'];
+                    $label = $entity['label'];
+
+                    if ($start < $end) {
+                        $text = substr($text, 0, $start).'[REDACTED_'.$label.']'.substr($text, $end);
+                    }
+                }
+
+                $redacted[$batchKeys[$i]] = $text;
+            }
+        }
+
+        return array_values($redacted);
+    }
+
+    /**
+     * Ensure the GLiNER model is loaded.
+     *
+     * @throws \RuntimeException if model loading fails
+     */
+    private function ensureModelLoaded(): void
+    {
+        if (null !== $this->gliner) {
             return;
         }
 
-        $this->logger->info('Waiting for GLiNER to become ready...');
-
-        // Wait for ready signal (no timeout - model download may take a while, user can Ctrl+C)
-        while (true) {
-            $line = $this->readLine(1);
-
-            if (null !== $line) {
-                $response = json_decode($line, true);
-
-                if (\is_array($response)) {
-                    if (isset($response['error'])) {
-                        $stderrContent = stream_get_contents($this->stderr);
-                        $this->closeStderr();
-                        throw new \RuntimeException('GLiNER error: '.$response['error'].($stderrContent ? "\n".$stderrContent : ''));
-                    }
-
-                    if (isset($response['status'])) {
-                        if ('ready' === $response['status']) {
-                            $this->isReady = true;
-                            break;
-                        }
-                        if ('loading' === $response['status']) {
-                            $this->logger->info('GLiNER model is loading...');
-                        }
-                        if ('downloading' === $response['status']) {
-                            $this->logger->info('GLiNER model is downloading (first run may take a while)...');
-                        }
-                    }
-                }
-            }
-
-            usleep(100000); // 100ms
+        if (!class_exists(\GlinerWrapper::class)) {
+            throw new \RuntimeException('GLiNER PHP extension not installed. Install from: https://github.com/ineersa/gliner-rs-php');
         }
 
-        $this->closeStderr();
-        $this->logger->info('GLiNER PII analyzer ready');
-    }
+        $tokenizerPath = $this->configLoader->getTokenizerPath();
+        $modelPath = $this->configLoader->getModelPath();
 
-    private function closeStderr(): void
-    {
-        if (null !== $this->stderr && \is_resource($this->stderr)) {
-            fclose($this->stderr);
-        }
-        $this->stderr = null;
-    }
-
-    private function getScriptPath(): string
-    {
-        // Check relative to project root
-        $projectRoot = \dirname(__DIR__, 2);
-
-        return $projectRoot.'/'.self::SCRIPT_PATH;
-    }
-
-    private function writeLine(string $data): void
-    {
-        if (null === $this->stdin || !\is_resource($this->stdin)) {
-            throw new \RuntimeException('Process stdin not available');
+        if (null === $tokenizerPath || null === $modelPath) {
+            throw new \RuntimeException('PII config not set. Add pii.tokenizer_path and pii.model_path to your database config.');
         }
 
-        $written = fwrite($this->stdin, $data."\n");
-
-        if (false === $written) {
-            throw new \RuntimeException('Failed to write to GLiNER process');
+        if (!file_exists($tokenizerPath)) {
+            throw new \RuntimeException(\sprintf('Tokenizer file not found: %s', $tokenizerPath));
         }
 
-        fflush($this->stdin);
-    }
-
-    private function readLine(int $timeoutSeconds): ?string
-    {
-        if (null === $this->stdout || !\is_resource($this->stdout)) {
-            return null;
+        if (!file_exists($modelPath)) {
+            throw new \RuntimeException(\sprintf('Model file not found: %s', $modelPath));
         }
 
-        $startTime = time();
+        $this->logger->info('Loading GLiNER model...', [
+            'tokenizer' => $tokenizerPath,
+            'model' => $modelPath,
+        ]);
 
-        while ((time() - $startTime) < $timeoutSeconds) {
-            $line = fgets($this->stdout);
-
-            if (false !== $line && '' !== trim($line)) {
-                return trim($line);
-            }
-
-            usleep(10000); // 10ms
+        try {
+            $this->gliner = new \GlinerWrapper($tokenizerPath, $modelPath);
+            $this->logger->info('GLiNER PII analyzer ready');
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Failed to load GLiNER model: '.$e->getMessage(), previous: $e);
         }
-
-        return null;
     }
 }

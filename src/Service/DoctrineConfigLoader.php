@@ -17,6 +17,10 @@ final class DoctrineConfigLoader
     /** @var array<string, array{name: string, type: string, version: ?string, pii_enabled: bool, connection: Connection}> */
     private array $connections = [];
 
+    private ?string $tokenizerPath = null;
+    private ?string $modelPath = null;
+    private ?float $threshold = null;
+
     public function __construct(
         private LoggerInterface $logger,
     ) {
@@ -35,6 +39,7 @@ final class DoctrineConfigLoader
         $this->validateConfigStructure($config);
 
         $this->loadConnections($config);
+        $this->loadPiiConfig($config);
     }
 
     /** @return array<string> */
@@ -89,6 +94,21 @@ final class DoctrineConfigLoader
         return false;
     }
 
+    public function hasPiiConfig(): bool
+    {
+        return null !== $this->tokenizerPath && null !== $this->modelPath;
+    }
+
+    public function getTokenizerPath(): ?string
+    {
+        return $this->tokenizerPath;
+    }
+
+    public function getModelPath(): ?string
+    {
+        return $this->modelPath;
+    }
+
     /** @return string[] */
     public function getTableNames(string $connectionName): array
     {
@@ -113,6 +133,11 @@ final class DoctrineConfigLoader
         $createTableSql = $platform->getCreateTableSQL($table);
 
         return implode(";\n", $createTableSql).';';
+    }
+
+    public function getThreshold(): float
+    {
+        return $this->threshold ?? 0.9;
     }
 
     private function getConfigFilePath(): string
@@ -191,6 +216,46 @@ final class DoctrineConfigLoader
         if ([] === $this->connections) {
             throw new \RuntimeException('No database connections defined in configuration.');
         }
+    }
+
+    /** @param mixed[] $config */
+    private function loadPiiConfig(array $config): void
+    {
+        if (!isset($config['pii'])) {
+            return;
+        }
+
+        $piiConfig = $config['pii'];
+        if (!\is_array($piiConfig)) {
+            throw new \RuntimeException('"pii" config section must be an array.');
+        }
+
+        if (isset($piiConfig['tokenizer_path']) && \is_string($piiConfig['tokenizer_path'])) {
+            $this->tokenizerPath = $this->resolveRelativePath($piiConfig['tokenizer_path']);
+        }
+
+        if (isset($piiConfig['model_path']) && \is_string($piiConfig['model_path'])) {
+            $this->modelPath = $this->resolveRelativePath($piiConfig['model_path']);
+        }
+
+        if (isset($piiConfig['threshold']) && is_numeric($piiConfig['threshold'])) {
+            $this->threshold = (float) $piiConfig['threshold'];
+        }
+
+        if ($this->hasAnyPiiEnabled() && !$this->hasPiiConfig()) {
+            $this->logger->warning('PII is enabled for connections but pii.tokenizer_path and pii.model_path are not configured.');
+        }
+    }
+
+    private function resolveRelativePath(string $path): string
+    {
+        if (str_starts_with($path, '/')) {
+            return $path;
+        }
+
+        $projectRoot = \dirname(__DIR__, 2);
+
+        return $projectRoot.'/'.$path;
     }
 
     /** @param mixed[] $connectionConfig */

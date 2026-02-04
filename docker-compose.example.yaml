@@ -19,6 +19,8 @@ services:
             - ./databases.yaml:/config/databases.yaml:ro
             # Mount log directory to view logs
             - ./log:/tmp/database-mcp/log
+            # Optional: Mount GLiNER models for PII detection (if pii_enabled: true in databases.yaml)
+            # - ./models:/app/models:ro
 
     # Log viewer - Use to view logs from the MCP server
     # Run with: docker compose run --rm logs

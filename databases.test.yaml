@@ -19,3 +19,8 @@ doctrine:
                 serverVersion: "2019"
                 driverOptions:
                     TrustServerCertificate: "yes"
+
+pii:
+    tokenizer_path: "models/tokenizer.json"
+    model_path: "models/model.onnx"
+    threshold: 0.8

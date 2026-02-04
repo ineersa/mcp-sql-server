@@ -59,8 +59,8 @@ class PIIDiscoveryCommand extends Command
                 'confidence-threshold',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Minimum confidence score (0.0-1.0) to flag PII',
-                (string) self::DEFAULT_THRESHOLD
+                'Minimum confidence score (0.0-1.0) to flag PII (default: configured or '.self::DEFAULT_THRESHOLD.')',
+                null
             )
             ->setHelp($this->getHelpText());
     }
@@ -89,7 +89,16 @@ class PIIDiscoveryCommand extends Command
             $sampleSize = self::DEFAULT_SAMPLE_SIZE;
         }
 
-        $threshold = (float) $input->getOption('confidence-threshold');
+        // Load database configuration first to access configured threshold
+        $this->doctrineConfigLoader->loadAndValidate();
+
+        $thresholdOption = $input->getOption('confidence-threshold');
+        if (null !== $thresholdOption) {
+            $threshold = (float) $thresholdOption;
+        } else {
+            $threshold = $this->doctrineConfigLoader->getThreshold();
+        }
+
         if ($threshold < 0.0 || $threshold > 1.0) {
             $io->error('Confidence threshold must be between 0.0 and 1.0');
 
@@ -97,9 +106,6 @@ class PIIDiscoveryCommand extends Command
         }
 
         try {
-            // Load database configuration
-            $this->doctrineConfigLoader->loadAndValidate();
-
             // Validate connection exists
             if (!\in_array($connectionName, $this->doctrineConfigLoader->getConnectionNames(), true)) {
                 $availableConnections = implode(', ', $this->doctrineConfigLoader->getConnectionNames());
@@ -147,10 +153,8 @@ class PIIDiscoveryCommand extends Command
             $io->text(\sprintf('Confidence threshold: <info>%.1f%%</info>', $threshold * 100));
             $io->newLine();
 
-            // Start GLiNER analyzer
-            $io->text('Starting GLiNER PII analyzer...');
-            $this->piiAnalyzer->start();
-            $io->text('<info>GLiNER ready</info>');
+            // GLiNER will be loaded on first analyze call
+            $io->text('GLiNER PII analyzer will be loaded on first table scan...');
             $io->newLine();
 
             /** @var array<string, array<string, list<string>>> $results */
@@ -201,7 +205,6 @@ class PIIDiscoveryCommand extends Command
                         );
                     }
                 } catch (\Throwable $e) {
-                    $this->piiAnalyzer->stop();
                     $io->newLine();
                     $io->error(\sprintf('Error processing table "%s": %s', $tableName, $e->getMessage()));
 
@@ -211,7 +214,6 @@ class PIIDiscoveryCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
-            // $this->piiAnalyzer->stop();
             $this->logger->error('PII discovery failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -272,8 +274,9 @@ class PIIDiscoveryCommand extends Command
             'Protected Health Information (PHI) using NVIDIA\'s GLiNER-PII model.',
             '',
             '<info>Requirements:</info>',
-            '  - Python 3.8+ with GLiNER library installed',
-            '  - Run: pip install -r scripts/requirements.txt',
+            '  - gliner-rs-php extension installed',
+            '  - Model files: tokenizer.json and model.onnx in configured paths',
+            '  - See: https://github.com/ineersa/gliner-rs-php',
             '',
             '<info>Examples:</info>',
             '  <comment>php bin/console pii:discover --connection=production</comment>',

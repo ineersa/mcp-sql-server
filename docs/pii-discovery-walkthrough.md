@@ -4,31 +4,65 @@ This document provides a walkthrough of the PII Discovery feature implementation
 
 ## Feature Overview
 
-The `pii:discover` command scans database tables for Personally Identifiable Information (PII) and Protected Health Information (PHI) using NVIDIA's GLiNER-PII model.
+The `pii:discover` command scans database tables for Personally Identifiable Information (PII) and Protected Health Information (PHI) using NVIDIA's GLiNER-PII model via the native PHP extension.
 
-## Files Created/Modified
+## Architecture
 
-### New Files
+```mermaid
+sequenceDiagram
+    participant CLI as PHP Command
+    participant Gliner as GLiNER PHP Extension
+    participant DB as Database
 
-| File                                        | Description                                                                                                                      |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `src/Enum/PIIGroup.php`                     | Enum with 8 PII categories (Personal, Contact, Financial, Government, Digital/Technical, Healthcare/PHI, Temporal, Organization) |
-| `src/Enum/PIILabel.php`                     | Enum with 64 PII/PHI entity types, each mapped to a group                                                                        |
-| `src/Service/PIIAnalyzerService.php`        | Service managing Python subprocess via NDJSON communication                                                                      |
-| `src/Command/PIIDiscoveryCommand.php`       | CLI command with options for connection, tables, sample-size, confidence-threshold                                               |
-| `scripts/gliner_pii.py`                     | Python script that loads GLiNER-PII model and processes data                                                                     |
-| `scripts/requirements.txt`                  | Python dependencies (gliner, torch)                                                                                              |
-| `Dockerfile.test`                           | Test image with PHP 8.4 + Python + GLiNER                                                                                        |
-| `databases.docker.test.yaml`                | Docker-specific DB config using service names                                                                                    |
-| `tests/Command/PIIDiscoveryCommandTest.php` | Integration tests with `@group pii` annotation                                                                                   |
+    CLI->>Gliner: Load model (tokenizer + ONNX)
+    CLI->>DB: Get table list
+    loop Each Table
+        CLI->>DB: SELECT random 50 rows
+        CLI->>Gliner: predictBatch(texts, labels)
+        Gliner->>CLI: Entities with scores
+        CLI-->>CLI: Output detected PII columns
+    end
+    CLI-->>CLI: Output final YAML report
+```
 
-### Modified Files
+## Files
 
-| File                                  | Changes                                                        |
-| ------------------------------------- | -------------------------------------------------------------- |
-| `docker-compose.test.yaml`            | Added `php-test` service                                       |
-| `composer.json`                       | Added `tests-docker`, `tests-pii`, `docker-test-build` scripts |
-| `tests/Fixtures/DatabaseFixtures.php` | Added `pii_samples` table with known PII data                  |
+### Core Files
+
+| File                                  | Description                                                |
+| ------------------------------------- | ---------------------------------------------------------- |
+| `src/Service/PIIAnalyzerService.php`  | Service using GLiNER PHP extension for detection/redaction |
+| `src/Command/PIIDiscoveryCommand.php` | CLI command for PII scanning                               |
+| `src/Enum/PIILabel.php`               | Enum with 64 PII/PHI entity types                          |
+| `src/Enum/PIIGroup.php`               | Enum with 8 PII categories                                 |
+| `stubs/GlinerWrapper.php`             | IDE stubs for the PHP extension                            |
+
+### Configuration
+
+| File                    | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `databases.yaml`        | Database connections + `pii` section with model paths |
+| `models/tokenizer.json` | GLiNER tokenizer (~8MB)                               |
+| `models/model.onnx`     | GLiNER ONNX model (~1.8GB)                            |
+
+---
+
+## Configuration
+
+Add `pii` section to your database config YAML:
+
+```yaml
+doctrine:
+    dbal:
+        connections:
+            production:
+                url: "mysql://..."
+                pii_enabled: true # Enable PII redaction for this connection
+
+pii:
+    tokenizer_path: "models/tokenizer.json"
+    model_path: "models/model.onnx"
+```
 
 ---
 
@@ -47,98 +81,25 @@ php bin/console pii:discover -c production --tables=users,orders,customers
 php bin/console pii:discover -c production -s 100 --confidence-threshold=0.8
 ```
 
-### View Available Options
-
-```bash
-php bin/console pii:discover --help
-```
-
-This displays:
-
-- All command options
-- Grouped list of all 64 PII/PHI entity types by category
-
 ---
 
-### Running Tests
+## Requirements
 
-### Standard Tests (excludes PII tests)
-
-```bash
-# Run all tests except PII (no Python required)
-vendor/bin/phpunit --exclude-group pii
-```
-
-### PII Integration Tests (requires Docker)
-
-Since Python is not available on the host machine, all PII tests must run inside Docker containers.
+1. **GLiNER PHP Extension** - Install from [gliner-rs-php releases](https://github.com/ineersa/gliner-rs-php/releases):
 
 ```bash
-# Run all tests inside Docker container (slow - runs everything)
-composer tests-docker
+# Download and extract
+curl -fsSL -o gliner.tar.gz https://github.com/ineersa/gliner-rs-php/releases/download/0.0.6/gliner-rs-php-0.0.6-linux-x86_64.tar.gz
+tar -xzf gliner.tar.gz
 
-# Run only PII-specific tests (faster)
-composer tests-pii
-
-# Run a SINGLE test file (fastest for development)
-composer test -- tests/Command/PIIDiscoveryCommandTest.php
-
-# Run a specific test method
-composer test -- --filter itDetectsPiiInPiiSamplesTable
+# Install extension
+cp libgliner_rs_php.so /usr/local/lib/php/extensions/
+echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner_rs_php.ini
 ```
 
----
-
-## Architecture Details
-
-### Communication Flow
-
-1. **PHP Command** starts the Python subprocess
-2. **Python script** loads the GLiNER-PII model (~2GB)
-3. For each table:
-    - PHP queries random sample rows from database
-    - PHP sends data to Python via NDJSON (newline-delimited JSON)
-    - Python analyzes each column using GLiNER
-    - Python returns detected PII types with confidence scores
-    - PHP collects results and displays progress
-4. PHP outputs final YAML report
-
-### NDJSON Protocol
-
-**Request (PHP → Python):**
-
-```json
-{
-  "action": "analyze",
-  "table": "users",
-  "columns": ["name", "email", "phone"],
-  "data": [["John Smith", "john@example.com", "555-1234"], ...],
-  "threshold": 0.9
-}
-```
-
-**Response (Python → PHP):**
-
-```json
-{
-    "table": "users",
-    "results": {
-        "name": ["first_name", "last_name"],
-        "email": ["email"],
-        "phone": ["phone_number"]
-    },
-    "samples": {
-        "name": "John Smith",
-        "email": "john@example.com"
-    }
-}
-```
-
-**Shutdown:**
-
-```json
-{ "action": "shutdown" }
-```
+2. **Model Files** - Place in `models/` directory:
+    - `tokenizer.json`
+    - `model.onnx`
 
 ---
 
@@ -146,59 +107,16 @@ composer test -- --filter itDetectsPiiInPiiSamplesTable
 
 The system detects 64 entity types across 8 categories:
 
-### Personal (13 types)
-
-`first_name`, `last_name`, `name`, `date_of_birth`, `age`, `gender`, `sexuality`, `race_ethnicity`, `religious_belief`, `political_view`, `occupation`, `employment_status`, `education_level`
-
-### Contact (10 types)
-
-`email`, `phone_number`, `street_address`, `city`, `county`, `state`, `country`, `coordinate`, `zip_code`, `po_box`
-
-### Financial (10 types)
-
-`credit_debit_card`, `cvv`, `bank_routing_number`, `account_number`, `iban`, `swift_bic`, `pin`, `ssn`, `tax_id`, `ein`
-
-### Government (5 types)
-
-`passport_number`, `driver_license`, `license_plate`, `national_id`, `voter_id`
-
-### Digital/Technical (11 types)
-
-`ipv4`, `ipv6`, `mac_address`, `url`, `user_name`, `password`, `device_identifier`, `imei`, `serial_number`, `api_key`, `secret_key`
-
-### Healthcare/PHI (7 types)
-
-`medical_record_number`, `health_plan_beneficiary_number`, `blood_type`, `biometric_identifier`, `health_condition`, `medication`, `insurance_policy_number`
-
-### Temporal (3 types)
-
-`date`, `time`, `date_time`
-
-### Organization (5 types)
-
-`company_name`, `employee_id`, `customer_id`, `certificate_license_number`, `vehicle_identifier`
-
----
-
-## Docker Test Environment
-
-### Container Setup
-
-The `php-test` container includes:
-
-- PHP 8.4 with all database extensions (MySQL, PostgreSQL, SQLite, SQL Server)
-- Python 3 with GLiNER and PyTorch (CPU version)
-- Composer for PHP dependencies
-
-### Building the Test Image
-
-```bash
-# Build the test image
-composer docker-test-build
-
-# Or manually
-docker compose -f docker-compose.test.yaml build php-test
-```
+| Category              | Types                                                                                                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Personal**          | first_name, last_name, name, date_of_birth, age, gender, sexuality, race_ethnicity, religious_belief, political_view, occupation, employment_status, education_level |
+| **Contact**           | email, phone_number, street_address, city, county, state, country, coordinate, zip_code, po_box                                                                      |
+| **Financial**         | credit_debit_card, cvv, bank_routing_number, account_number, iban, swift_bic, pin, ssn, tax_id, ein                                                                  |
+| **Government**        | passport_number, driver_license, license_plate, national_id, voter_id                                                                                                |
+| **Digital/Technical** | ipv4, ipv6, mac_address, url, user_name, password, device_identifier, imei, serial_number, api_key, secret_key                                                       |
+| **Healthcare/PHI**    | medical_record_number, health_plan_beneficiary_number, blood_type, biometric_identifier, health_condition, medication, insurance_policy_number                       |
+| **Temporal**          | date, time, date_time                                                                                                                                                |
+| **Organization**      | company_name, employee_id, customer_id, certificate_license_number, vehicle_identifier                                                                               |
 
 ---
 
@@ -213,7 +131,7 @@ PII Discovery
  Sample size: 50 rows per table
  Confidence threshold: 90.0%
 
- Starting GLiNER PII analyzer...
+ Loading GLiNER model...
  GLiNER ready
 
 Processing table pii_samples... Done
@@ -222,11 +140,9 @@ Processing table pii_samples... Done
  ---------------- ----------------------- ----------------------
   customer_name    first_name, last_name   Jane Doe
   customer_email   email                   jane.doe@company.org
-  phone            coordinate              555.456.7890
   ip_address       ipv4                    192.168.1.100
  ---------------- ----------------------- ----------------------
 
-Processing table products... Done
 Processing table users... Done
  -------- ------------- -------------------
   Column   PII Type(s)   Sample
@@ -234,45 +150,49 @@ Processing table users... Done
   name     first_name    Frank
   email    email         frank@example.com
  -------- ------------- -------------------
+```
 
+---
 
-PII Detection Results
----------------------
+## Running Tests
 
- Found potential PII in 6 columns across 2 tables:
+```bash
+# Run all tests inside Docker container
+composer tests
 
-pii_samples:
-  customer_name:
-    - first_name
-    - last_name
-  customer_email:
-    - email
-  phone:
-    - coordinate
-  ip_address:
-    - ipv4
-users:
-  name:
-    - first_name
-  email:
-    - email
+# Run only PII-specific tests
+composer test -- tests/Command/PIIDiscoveryCommandTest.php
+composer test -- tests/Service/PIIAnalyzerServiceTest.php
 ```
 
 ---
 
 ## Troubleshooting
 
-### Python Dependencies Not Found
+### Extension Not Found
 
-```bash
-# Install Python dependencies
-pip install -r scripts/requirements.txt
+```
+GLiNER PHP extension not installed.
 ```
 
-### Model Download Slow
+Ensure the extension is installed and enabled in php.ini:
 
-The first run downloads the GLiNER-PII model (~2GB).
+```bash
+php -m | grep gliner
+```
 
-### GPU vs CPU
+### Model Files Not Found
 
-The implementation uses CPU-only PyTorch to keep the Docker image size reasonable. For GPU support, modify `Dockerfile.test` to use the NVIDIA base image and install GPU-enabled PyTorch.
+```
+Tokenizer file not found: models/tokenizer.json
+```
+
+Download model files and place them in the configured paths.
+
+### Low Confidence Results
+
+Increase sample size or lower confidence threshold:
+
+```bash
+php bin/console pii:discover -c prod --sample-size=200 --confidence-threshold=0.7
+```

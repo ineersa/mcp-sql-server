@@ -1,6 +1,6 @@
 # Database MCP Server - Production Dockerfile
 # Supports: MySQL, PostgreSQL, SQLite, SQL Server
-# Includes GLiNER for PII detection
+# Includes GLiNER PHP extension for PII detection
 
 FROM php:8.4-cli-bookworm
 
@@ -23,10 +23,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     # Required for SQLite
     libsqlite3-dev \
-    # Python 3.11 for GLiNER (prebuilt wheels available)
-    python3.11 \
-    python3.11-venv \
-    python3-pip \
     # Cleanup apt cache in same layer
     && rm -rf /var/lib/apt/lists/*
 
@@ -61,14 +57,14 @@ RUN set -eux; \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* /tmp/pear
 
-# Make python3.11 the default python3
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
-# Install Python dependencies for GLiNER (CPU-only PyTorch for smaller image)
-# Using prebuilt wheels from PyTorch index for fast installation
-RUN pip3 install --break-system-packages --no-cache-dir \
-    torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip3 install --break-system-packages --no-cache-dir gliner>=0.2.0
+# Install GLiNER PHP extension
+RUN set -eux; \
+    curl -fsSL -o /tmp/gliner.tar.gz https://github.com/ineersa/gliner-rs-php/releases/download/0.0.6/gliner-rs-php-0.0.6-linux-x86_64.tar.gz \
+    && mkdir -p /tmp/gliner \
+    && tar -xzf /tmp/gliner.tar.gz -C /tmp/gliner \
+    && cp /tmp/gliner/libgliner_rs_php.so /usr/local/lib/php/extensions/libgliner_rs_php.so \
+    && echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner_rs_php.ini \
+    && rm -rf /tmp/gliner /tmp/gliner.tar.gz
 
 # Configure OPcache for production
 RUN { \
@@ -104,8 +100,8 @@ COPY . ./
 # Generate optimized autoloader
 RUN composer dump-autoload --optimize --classmap-authoritative
 
-# Copy GLiNER script
-COPY scripts/gliner_pii.py /app/scripts/gliner_pii.py
+# Note: For PII detection, mount GLiNER models via docker-compose volume:
+# - ./models:/app/models:ro
 
 # Create log directory
 RUN mkdir -p /tmp/database-mcp/log

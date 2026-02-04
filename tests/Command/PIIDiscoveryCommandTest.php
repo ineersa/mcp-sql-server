@@ -16,7 +16,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 /**
  * Integration tests for PII Discovery Command.
  *
- * These tests require the Docker environment with Python/GLiNER.
+ * These tests require the Docker environment with GLiNER PHP extension.
  * Run with: composer tests
  */
 final class PIIDiscoveryCommandTest extends TestCase
@@ -28,10 +28,7 @@ final class PIIDiscoveryCommandTest extends TestCase
 
     public static function tearDownAfterClass(): void
     {
-        if (null !== self::$sharedAnalyzer) {
-            self::$sharedAnalyzer->stop();
-            self::$sharedAnalyzer = null;
-        }
+        self::$sharedAnalyzer = null;
     }
 
     protected function setUp(): void
@@ -40,7 +37,7 @@ final class PIIDiscoveryCommandTest extends TestCase
         $this->configLoader->loadAndValidate();
 
         if (null === self::$sharedAnalyzer) {
-            self::$sharedAnalyzer = new PIIAnalyzerService(new NullLogger());
+            self::$sharedAnalyzer = new PIIAnalyzerService(new NullLogger(), $this->configLoader);
         }
 
         $command = new PIIDiscoveryCommand(
@@ -156,5 +153,9 @@ final class PIIDiscoveryCommandTest extends TestCase
         $this->assertStringContainsString('first_name', $helpText);
         $this->assertStringContainsString('email', $helpText);
         $this->assertStringContainsString('ssn', $helpText);
+
+        // Should reference PHP extension instead of Python
+        $this->assertStringContainsString('gliner-rs-php', $helpText);
+        $this->assertStringNotContainsString('Python', $helpText);
     }
 }
