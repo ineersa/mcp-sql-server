@@ -16,8 +16,6 @@ use Psr\Log\LoggerInterface;
  */
 final class PIIAnalyzerService
 {
-    private const int BATCH_SIZE = 128;
-
     private ?\GlinerWrapper $gliner = null;
 
     public function __construct(
@@ -186,18 +184,15 @@ final class PIIAnalyzerService
     {
         /** @var array<string, int> $detectedLabels */
         $detectedLabels = [];
+        $predictions = $this->gliner->predictBatch($texts, $labels);
 
-        foreach (array_chunk($texts, self::BATCH_SIZE) as $batchOffset => $batchTexts) {
-            $predictions = $this->gliner->predictBatch($batchTexts, $labels);
+        foreach ($predictions as $textIdx => $entities) {
+            foreach ($entities as $entity) {
+                $score = $entity['score'] ?? 0.0;
+                $label = $entity['label'] ?? '';
 
-            foreach ($predictions as $textIdx => $entities) {
-                foreach ($entities as $entity) {
-                    $score = $entity['score'] ?? 0.0;
-                    $label = $entity['label'] ?? '';
-
-                    if ($score >= $threshold && '' !== $label && !isset($detectedLabels[$label])) {
-                        $detectedLabels[$label] = ($batchOffset * self::BATCH_SIZE) + $textIdx;
-                    }
+                if ($score >= $threshold && '' !== $label && !isset($detectedLabels[$label])) {
+                    $detectedLabels[$label] = $textIdx;
                 }
             }
         }
