@@ -16,6 +16,12 @@ use Psr\Log\LoggerInterface;
  */
 final class PIIAnalyzerService
 {
+    /**
+     * Number of rows to process in each batch for redaction.
+     * Aligns with default LIMIT enforcement in tools.
+     */
+    private const int REDACT_ROW_CHUNK_SIZE = 10;
+
     private ?\GlinerWrapper $gliner = null;
 
     public function __construct(
@@ -82,6 +88,9 @@ final class PIIAnalyzerService
     /**
      * Redact PII values from query result rows.
      *
+     * Processes all texts across all columns in a single batch per chunk
+     * to minimize inference calls. Rows are chunked to keep memory manageable.
+     *
      * @param list<array<string, mixed>> $rows      Query result rows to redact
      * @param float                      $threshold Confidence threshold (0.0-1.0)
      *
@@ -98,48 +107,73 @@ final class PIIAnalyzerService
         $this->ensureModelLoaded();
 
         $labels = $this->configLoader->getLabels() ?? PIILabel::getAllValues();
+
+        // Process in chunks to keep memory manageable
+        $redactedRows = [];
+        $chunks = array_chunk($rows, self::REDACT_ROW_CHUNK_SIZE);
+
+        foreach ($chunks as $chunkRows) {
+            $redactedRows = [...$redactedRows, ...$this->redactRowChunk($chunkRows, $labels, $threshold)];
+        }
+
+        return $redactedRows;
+    }
+
+    /**
+     * Redact PII from a chunk of rows using a single batch call.
+     *
+     * @param list<array<string, mixed>> $rows      Rows to process
+     * @param list<string>               $labels    PII labels to detect
+     * @param float                      $threshold Confidence threshold
+     *
+     * @return list<array<string, mixed>> Redacted rows
+     */
+    private function redactRowChunk(array $rows, array $labels, float $threshold): array
+    {
+        if ([] === $rows) {
+            return [];
+        }
+
         $columns = array_keys($rows[0]);
 
-        // Build column-based text arrays for batch processing
-        /** @var array<string, list<string>> $columnTexts */
-        $columnTexts = [];
-        /** @var array<string, list<int>> $columnRowIndices */
-        $columnRowIndices = [];
+        // Flatten all texts with their positions for single batch processing
+        /** @var list<string> $allTexts */
+        $allTexts = [];
+        /** @var list<array{row: int, col: string}> $positions */
+        $positions = [];
 
         foreach ($rows as $rowIdx => $row) {
             foreach ($columns as $colName) {
                 $value = $row[$colName] ?? null;
                 if (null !== $value && '' !== trim((string) $value)) {
-                    $columnTexts[$colName][] = (string) $value;
-                    $columnRowIndices[$colName][] = $rowIdx;
+                    $allTexts[] = (string) $value;
+                    $positions[] = ['row' => $rowIdx, 'col' => $colName];
                 }
             }
+        }
+
+        if ([] === $allTexts) {
+            return $rows;
         }
 
         $redactedRows = $rows;
 
-        foreach ($columns as $colName) {
-            $texts = $columnTexts[$colName] ?? [];
-            if ([] === $texts) {
-                continue;
-            }
+        try {
+            $redactedTexts = $this->redactTexts($allTexts, $labels, $threshold);
 
-            try {
-                $redactedTexts = $this->redactTexts($texts, $labels, $threshold);
-                $rowIndices = $columnRowIndices[$colName];
-
-                foreach ($redactedTexts as $i => $redactedText) {
-                    $redactedRows[$rowIndices[$i]][$colName] = $redactedText;
-                }
-            } catch (\Throwable $e) {
-                $this->logger->error('GLiNER batch redaction failed for column', [
-                    'column' => $colName,
-                    'error' => $e->getMessage(),
-                ]);
+            // Map redacted texts back to their original positions
+            foreach ($redactedTexts as $i => $redactedText) {
+                $pos = $positions[$i];
+                $redactedRows[$pos['row']][$pos['col']] = $redactedText;
             }
+        } catch (\Throwable $e) {
+            $this->logger->error('GLiNER batch redaction failed', [
+                'error' => $e->getMessage(),
+                'textCount' => \count($allTexts),
+            ]);
         }
 
-        return $redactedRows;
+        return array_values($redactedRows);
     }
 
     /**
