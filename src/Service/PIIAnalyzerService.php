@@ -218,38 +218,33 @@ final class PIIAnalyzerService
     {
         $redacted = $texts;
 
-        foreach (array_chunk($texts, self::BATCH_SIZE, true) as $batchOffset => $batchTexts) {
-            $batchTextsList = array_values($batchTexts);
-            $batchKeys = array_keys($batchTexts);
+        $predictions = $this->gliner->predictBatch($texts, $labels);
 
-            $predictions = $this->gliner->predictBatch($batchTextsList, $labels);
+        foreach ($predictions as $i => $entities) {
+            $filtered = array_filter(
+                $entities,
+                static fn (array $e): bool => $e['score'] >= $threshold
+            );
 
-            foreach ($predictions as $i => $entities) {
-                $filtered = array_filter(
-                    $entities,
-                    static fn (array $e): bool => $e['score'] >= $threshold
-                );
-
-                if ([] === $filtered) {
-                    continue;
-                }
-
-                // Sort by start position descending to replace from end to start
-                usort($filtered, static fn (array $a, array $b): int => $b['start'] <=> $a['start']);
-
-                $text = $batchTextsList[$i];
-                foreach ($filtered as $entity) {
-                    $start = $entity['start'];
-                    $end = $entity['end'];
-                    $label = $entity['label'];
-
-                    if ($start < $end) {
-                        $text = substr($text, 0, $start).'[REDACTED_'.$label.']'.substr($text, $end);
-                    }
-                }
-
-                $redacted[$batchKeys[$i]] = $text;
+            if ([] === $filtered) {
+                continue;
             }
+
+            // Sort by start position descending to replace from end to start
+            usort($filtered, static fn (array $a, array $b): int => $b['start'] <=> $a['start']);
+
+            $text = $texts[$i];
+            foreach ($filtered as $entity) {
+                $start = $entity['start'];
+                $end = $entity['end'];
+                $label = $entity['label'];
+
+                if ($start < $end) {
+                    $text = substr($text, 0, $start).'[REDACTED_'.$label.']'.substr($text, $end);
+                }
+            }
+
+            $redacted[$i] = $text;
         }
 
         return array_values($redacted);
