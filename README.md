@@ -14,6 +14,10 @@ A PHP/Symfony [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) s
     - [Database Configuration File](#database-configuration-file)
 - [MCP Client Setup](#mcp-client-setup)
 - [Available Tools](#available-tools)
+- [PII Detection & Redaction](#pii-detection--redaction)
+    - [Enabling PII Protection](#enabling-pii-protection)
+    - [PII Discovery Command](#pii-discovery-command)
+    - [Model Setup](#model-setup)
 - [Security](#security)
 - [Development](#development)
 - [License](#license)
@@ -87,9 +91,10 @@ doctrine:
                 driver: "pdo_sqlite"
                 path: "var/test.sqlite"
 
-            # MySQL with URL/DSN format
+            # MySQL with URL/DSN format and PII redaction enabled
             products:
                 url: "mysql://user:password@127.0.0.1:3306/mydb?serverVersion=8.0&charset=utf8mb4"
+                pii_enabled: true # Enable PII redaction for query results
 
             # PostgreSQL with environment variable
             users:
@@ -106,6 +111,18 @@ doctrine:
                 serverVersion: "2019"
                 options:
                     TrustServerCertificate: "yes"
+
+# Optional: PII configuration for GLiNER model (required if any connection has pii_enabled: true)
+pii:
+    tokenizer_path: "models/tokenizer.json"
+    model_path: "models/model.onnx"
+    threshold: 0.9 # Confidence threshold (0.0-1.0)
+    # Optional: Limit detection to specific entity types (uses all 64 types if omitted)
+    # labels:
+    #     - email
+    #     - phone_number
+    #     - ssn
+    #     - credit_debit_card
 ```
 
 #### Supported Databases
@@ -243,6 +260,100 @@ Executes read-only SQL queries against a specified database connection.
 
 ---
 
+## PII Detection & Redaction
+
+This server includes built-in PII (Personally Identifiable Information) detection and redaction using the [GLiNER-PII ONNX model](https://huggingface.co/ineersa/gliner-PII-onnx) via the native [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension.
+
+### Enabling PII Protection
+
+PII redaction is configured per-connection. When enabled, query results are automatically scanned and sensitive data is replaced with `[REDACTED_type]` markers (e.g., `[REDACTED_email]`, `[REDACTED_ssn]`).
+
+**1. Enable on specific connections** in your `databases.yaml`:
+
+```yaml
+doctrine:
+    dbal:
+        connections:
+            production:
+                url: "mysql://..."
+                pii_enabled: true # Redact PII in query results
+            development:
+                url: "mysql://..."
+                # pii_enabled defaults to false
+```
+
+**2. Add PII configuration** (required if any connection has `pii_enabled: true`):
+
+```yaml
+pii:
+    tokenizer_path: "models/tokenizer.json"
+    model_path: "models/model.onnx"
+    threshold: 0.9 # Confidence threshold (0.0-1.0)
+    # Optional: Limit to specific entity types for better performance
+    labels:
+        - email
+        - phone_number
+        - ssn
+        - credit_debit_card
+```
+
+### PII Discovery Command
+
+The `pii:discover` command scans your database tables to identify columns containing PII:
+
+```bash
+# Scan all tables in a connection
+php bin/console pii:discover --connection=production
+
+# Scan specific tables
+php bin/console pii:discover -c production --tables=users,customers
+
+# Customize sample size and confidence threshold
+php bin/console pii:discover -c production -s 100 --confidence-threshold=0.8
+```
+
+**Command Options:**
+
+| Option                   | Description                                          |
+| ------------------------ | ---------------------------------------------------- |
+| `-c, --connection`       | Database connection name to scan (required)          |
+| `-t, --tables`           | Comma-separated list of tables (default: all tables) |
+| `-s, --sample-size`      | Rows to sample per table (default: 50)               |
+| `--confidence-threshold` | Minimum score to flag as PII (default: 0.9)          |
+
+### Model Setup
+
+**Using Docker (included automatically):**
+
+The Docker image includes the GLiNER PHP extension. You only need to mount the model files:
+
+```yaml
+# docker-compose.yaml
+services:
+    database-mcp:
+        volumes:
+            - ./models:/app/models:ro # Mount GLiNER models
+```
+
+Download model files from [ineersa/gliner-PII-onnx](https://huggingface.co/ineersa/gliner-PII-onnx):
+
+- `tokenizer.json` (~8MB)
+- `model.onnx` (~1.8GB)
+
+**Manual installation:**
+
+Install the [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension:
+
+```bash
+curl -fsSL -o gliner.tar.gz \
+    https://github.com/ineersa/gliner-rs-php/releases/download/0.0.6/gliner-rs-php-0.0.6-linux-x86_64.tar.gz
+tar -xzf gliner.tar.gz
+cp libgliner_rs_php.so /usr/local/lib/php/extensions/
+echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner.ini
+```
+
+---
+
 ## Security
 
 ### Read-Only Enforcement
@@ -300,10 +411,12 @@ composer docker-rebuild   # Rebuild without cache
 
 ```
 src/
-├── Command/        # Symfony console commands
+├── Command/        # Symfony console commands (including pii:discover)
+├── Enum/           # PII entity types and groups
 ├── ReadOnly/       # DBAL middleware for read-only enforcement
-├── Service/        # Core services
+├── Service/        # Core services (including PIIAnalyzerService)
 └── Tools/          # MCP tool implementations
+stubs/              # PHP extension stubs for IDE support
 tests/              # PHPUnit test suites
 config/             # Symfony configuration
 ```
