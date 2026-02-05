@@ -100,6 +100,47 @@ class PIIAnalyzerServiceTest extends TestCase
     }
 
     #[Test]
+    public function itHandlesVariousTypes(): void
+    {
+        $rows = [
+            [
+                'is_active' => true,
+                'is_deleted' => false,
+                'score' => 123,
+                'bio' => 'Contact me at jane@example.com', // PII
+                'nullable' => null,
+            ],
+            [
+                'is_active' => false,
+                'is_deleted' => true,
+                'score' => 456,
+                'bio' => 'Just a bio',
+                'nullable' => 'not null',
+            ],
+        ];
+
+        $redacted = self::$sharedAnalyzer->redact($rows);
+
+        $this->assertCount(2, $redacted);
+
+        // Row 1
+        $this->assertSame('true', $redacted[0]['is_active']);
+        $this->assertSame('false', $redacted[0]['is_deleted']);
+        $this->assertSame('123', $redacted[0]['score']);
+        $this->assertSame('NULL', $redacted[0]['nullable']);
+        // Check redaction
+        $this->assertStringContainsString('[REDACTED_', $redacted[0]['bio']);
+        $this->assertStringNotContainsString('jane@example.com', $redacted[0]['bio']);
+
+        // Row 2
+        $this->assertSame('false', $redacted[1]['is_active']);
+        $this->assertSame('true', $redacted[1]['is_deleted']);
+        $this->assertSame('456', $redacted[1]['score']);
+        $this->assertSame('Just a bio', $redacted[1]['bio']);
+        $this->assertSame('not null', $redacted[1]['nullable']);
+    }
+
+    #[Test]
     public function itHandlesEmptyAndNull(): void
     {
         $rows = [
@@ -111,8 +152,33 @@ class PIIAnalyzerServiceTest extends TestCase
         $redacted = self::$sharedAnalyzer->redact($rows);
 
         $this->assertCount(3, $redacted);
-        $this->assertNull($redacted[0]['val']);
+        $this->assertSame('NULL', $redacted[0]['val']);
         $this->assertSame('', $redacted[1]['val']);
         $this->assertSame('   ', $redacted[2]['val']);
+    }
+
+    #[Test]
+    public function itHandlesLargeFields(): void
+    {
+        // 10k chars > 2500 chunk max
+        // This forces a split in the middle of the field
+        $largeText = str_repeat('A long safe text block. ', 500); // ~12k chars
+        $pii = 'Contact: hidden@example.com';
+        // Add PII at the beginning, middle, and end
+        $text = $pii.' '.$largeText.' '.$pii;
+
+        $rows = [['large' => $text]];
+
+        $redacted = self::$sharedAnalyzer->redact($rows);
+
+        $this->assertCount(1, $redacted);
+        $res = $redacted[0]['large'];
+
+        // Length should be approx same (minus redacted parts)
+        $this->assertGreaterThan(10000, \strlen($res));
+
+        // PII should be gone
+        $this->assertStringNotContainsString('hidden@example.com', $res);
+        $this->assertStringContainsString('[REDACTED_', $res);
     }
 }

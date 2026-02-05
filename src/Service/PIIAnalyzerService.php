@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Utils\TextChunker;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -16,10 +17,14 @@ use Psr\Log\LoggerInterface;
 final class PIIAnalyzerService
 {
     /**
-     * Number of rows to process in each batch for redaction.
-     * Aligns with default LIMIT enforcement in tools.
+     * Max characters per chunk for GLiNER inference.
+     * 1800 chars is ~450 tokens, leaving room for safety within standard 512 limit.
      */
-    private const int REDACT_ROW_CHUNK_SIZE = 10;
+    private const int MAX_CHUNK_CHARS = 1800;
+
+    // Delimiters for concatenation
+    private const string COL_SEP = ' <||SEP||> ';
+    private const string ROW_SEP = ' <||ROW_SEP||> ';
 
     private ?\GlinerWrapper $gliner = null;
 
@@ -30,69 +35,17 @@ final class PIIAnalyzerService
     }
 
     /**
-     * Analyze table data for PII.
-     *
-     * @param string            $tableName Name of the table being analyzed
-     * @param list<string>      $columns   Column names
-     * @param list<list<mixed>> $data      Row data (array of rows, each row is array of values)
-     *
-     * @return array{results: array<string, list<string>>, samples: array<string, string>}
-     *
-     * @throws \RuntimeException if analysis fails
-     */
-    public function analyze(string $tableName, array $columns, array $data): array
-    {
-        if ([] === $data || [] === $columns) {
-            return ['results' => [], 'samples' => []];
-        }
-
-        $this->ensureModelLoaded();
-
-        $columnTexts = $this->collectColumnTexts($columns, $data);
-
-        /** @var array<string, list<string>> $results */
-        $results = [];
-        /** @var array<string, string> $samples */
-        $samples = [];
-
-        foreach ($columns as $i => $columnName) {
-            $texts = $columnTexts[$i] ?? [];
-            if ([] === $texts) {
-                continue;
-            }
-
-            try {
-                $columnLabels = $this->analyzeTexts($texts);
-
-                if ([] !== $columnLabels) {
-                    $results[$columnName] = array_keys($columnLabels);
-                    sort($results[$columnName]);
-
-                    // Store first sample for this column
-                    $samples[$columnName] = substr($texts[array_key_first($columnLabels)] ?? $texts[0], 0, 50);
-                }
-            } catch (\Throwable $e) {
-                $this->logger->error('GLiNER batch prediction failed for column', [
-                    'column' => $columnName,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return ['results' => $results, 'samples' => $samples];
-    }
-
-    /**
      * Redact PII values from query result rows.
      *
-     * Processes all texts across all columns in a single batch per chunk
-     * to minimize inference calls. Rows are chunked to keep memory manageable.
+     * Simplified Strategy:
+     * 1. Concatenate ALL rows into ONE big string.
+     * 2. Split string into chunks of 2500 chars.
+     * 3. Send chunks to GLiNER in ONE batch call.
+     * 4. Join redacted chunks and explode back to rows.
      *
      * @param list<array<string, mixed>> $rows Query result rows to redact
      *
      * @return list<array<string, mixed>> Rows with PII values replaced by [REDACTED_type]
-     *
-     * @throws \RuntimeException if redaction fails
      */
     public function redact(array $rows): array
     {
@@ -102,174 +55,121 @@ final class PIIAnalyzerService
 
         $this->ensureModelLoaded();
 
-        // Process in chunks to keep memory manageable
-        $redactedRows = [];
-        $chunks = array_chunk($rows, self::REDACT_ROW_CHUNK_SIZE);
-
-        foreach ($chunks as $chunkRows) {
-            $redactedRows = [...$redactedRows, ...$this->redactRowChunk($chunkRows)];
-        }
-
-        return $redactedRows;
-    }
-
-    /**
-     * Redact PII from a chunk of rows using a single batch call.
-     *
-     * @param list<array<string, mixed>> $rows Rows to process
-     *
-     * @return list<array<string, mixed>> Redacted rows
-     */
-    private function redactRowChunk(array $rows): array
-    {
-        if ([] === $rows) {
-            return [];
-        }
-
         $columns = array_keys($rows[0]);
 
-        // Flatten all texts with their positions for single batch processing
-        /** @var list<string> $allTexts */
-        $allTexts = [];
-        /** @var list<array{row: int, col: string}> $positions */
-        $positions = [];
+        // 1. One Big String
+        $rowStrings = [];
+        foreach ($rows as $row) {
+            $values = [];
+            foreach ($columns as $col) {
+                $values[] = $this->valueToString($row[$col] ?? null);
+            }
+            $rowStrings[] = implode(self::COL_SEP, $values);
+        }
+        $fullText = implode(self::ROW_SEP, $rowStrings);
 
-        foreach ($rows as $rowIdx => $row) {
-            foreach ($columns as $colName) {
-                $value = $row[$colName] ?? null;
-                if (null !== $value && '' !== trim((string) $value)) {
-                    $allTexts[] = (string) $value;
-                    $positions[] = ['row' => $rowIdx, 'col' => $colName];
+        // 2. Safe Split
+        $textChunks = TextChunker::splitTextSafely(
+            $fullText,
+            self::MAX_CHUNK_CHARS,
+            self::ROW_SEP,
+            self::COL_SEP
+        );
+
+        // 3. Run Inference (One Single Call)
+        try {
+            $labels = $this->configLoader->getLabels();
+            $threshold = $this->configLoader->getThreshold();
+
+            /** @var list<list<array{start: int, end: int, label: string, score: float}>> $batchPredictions */
+            $batchPredictions = $this->gliner->predictBatch($textChunks, $labels);
+
+            $redactedChunks = [];
+
+            foreach ($textChunks as $chunkIdx => $chunkText) {
+                $predictions = $batchPredictions[$chunkIdx] ?? [];
+
+                $filtered = array_filter(
+                    $predictions,
+                    static fn (array $e): bool => $e['score'] >= $threshold
+                );
+
+                if ([] !== $filtered) {
+                    usort($filtered, static fn (array $a, array $b): int => $b['start'] <=> $a['start']);
+                    foreach ($filtered as $entity) {
+                        $start = $entity['start'];
+                        $end = $entity['end'];
+                        $label = $entity['label'];
+                        if ($start < $end) {
+                            $chunkText = substr($chunkText, 0, $start).'[REDACTED_'.$label.']'.substr($chunkText, $end);
+                        }
+                    }
+                }
+                $redactedChunks[] = $chunkText;
+            }
+
+            // 4. Join
+            $fullRedactedText = implode('', $redactedChunks);
+
+            // 5. Explode back to rows
+            $finalRows = [];
+            $chunkRowStrings = explode(self::ROW_SEP, $fullRedactedText);
+
+            foreach ($chunkRowStrings as $rowString) {
+                $rowValues = explode(self::COL_SEP, $rowString);
+                $newRow = [];
+                foreach ($columns as $i => $colName) {
+                    $newRow[$colName] = $rowValues[$i] ?? '';
+                }
+                $finalRows[] = $newRow;
+            }
+
+            // Safety: Match row counts
+            $parsedCount = \count($finalRows);
+            $totalCount = \count($rows);
+
+            if ($parsedCount < $totalCount) {
+                for ($i = $parsedCount; $i < $totalCount; ++$i) {
+                    $safeRow = [];
+                    foreach ($columns as $col) {
+                        $safeRow[$col] = $this->valueToString($rows[$i][$col] ?? null);
+                    }
+                    $finalRows[] = $safeRow;
                 }
             }
-        }
-
-        if ([] === $allTexts) {
-            return $rows;
-        }
-
-        $redactedRows = $rows;
-
-        try {
-            $redactedTexts = $this->redactTexts($allTexts);
-
-            // Map redacted texts back to their original positions
-            foreach ($redactedTexts as $i => $redactedText) {
-                $pos = $positions[$i];
-                $redactedRows[$pos['row']][$pos['col']] = $redactedText;
+            if ($parsedCount > $totalCount) {
+                $finalRows = \array_slice($finalRows, 0, $totalCount);
             }
+
+            return $finalRows;
         } catch (\Throwable $e) {
             $this->logger->error('GLiNER batch redaction failed', [
                 'error' => $e->getMessage(),
-                'textCount' => \count($allTexts),
+                'chunkCount' => \count($textChunks),
             ]);
+            throw $e;
         }
-
-        return array_values($redactedRows);
     }
 
     /**
-     * Collect texts from data rows grouped by column index.
-     *
-     * @param list<string>      $columns Column names
-     * @param list<list<mixed>> $data    Row data
-     *
-     * @return array<int, list<string>> Texts grouped by column index
+     * Convert value to string representation for concatenation.
      */
-    private function collectColumnTexts(array $columns, array $data): array
+    private function valueToString(mixed $value): string
     {
-        /** @var array<int, list<string>> $columnTexts */
-        $columnTexts = [];
-        $numColumns = \count($columns);
-
-        foreach ($data as $row) {
-            foreach ($row as $i => $value) {
-                if ($i >= $numColumns) {
-                    continue;
-                }
-                $text = null !== $value ? (string) $value : '';
-                if ('' !== trim($text)) {
-                    $columnTexts[$i][] = $text;
-                }
-            }
+        if (null === $value) {
+            return 'NULL';
+        }
+        if (true === $value) {
+            return 'true';
+        }
+        if (false === $value) {
+            return 'false';
+        }
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
         }
 
-        return $columnTexts;
-    }
-
-    /**
-     * Analyze texts and return detected labels with sample indices.
-     *
-     * @param list<string> $texts Texts to analyze
-     *
-     * @return array<string, int> Map of label => first sample index
-     */
-    private function analyzeTexts(array $texts): array
-    {
-        $labels = $this->configLoader->getLabels();
-        $threshold = $this->configLoader->getThreshold();
-        /** @var array<string, int> $detectedLabels */
-        $detectedLabels = [];
-        $predictions = $this->gliner->predictBatch($texts, $labels);
-
-        foreach ($predictions as $textIdx => $entities) {
-            foreach ($entities as $entity) {
-                $score = $entity['score'] ?? 0.0;
-                $label = $entity['label'] ?? '';
-
-                if ($score >= $threshold && '' !== $label && !isset($detectedLabels[$label])) {
-                    $detectedLabels[$label] = $textIdx;
-                }
-            }
-        }
-
-        return $detectedLabels;
-    }
-
-    /**
-     * Redact PII from texts.
-     *
-     * @param list<string> $texts Texts to redact
-     *
-     * @return list<string> Redacted texts
-     */
-    private function redactTexts(array $texts): array
-    {
-        $labels = $this->configLoader->getLabels();
-        $threshold = $this->configLoader->getThreshold();
-
-        $redacted = $texts;
-
-        $predictions = $this->gliner->predictBatch($texts, $labels);
-
-        foreach ($predictions as $i => $entities) {
-            $filtered = array_filter(
-                $entities,
-                static fn (array $e): bool => $e['score'] >= $threshold
-            );
-
-            if ([] === $filtered) {
-                continue;
-            }
-
-            // Sort by start position descending to replace from end to start
-            usort($filtered, static fn (array $a, array $b): int => $b['start'] <=> $a['start']);
-
-            $text = $texts[$i];
-            foreach ($filtered as $entity) {
-                $start = $entity['start'];
-                $end = $entity['end'];
-                $label = $entity['label'];
-
-                if ($start < $end) {
-                    $text = substr($text, 0, $start).'[REDACTED_'.$label.']'.substr($text, $end);
-                }
-            }
-
-            $redacted[$i] = $text;
-        }
-
-        return array_values($redacted);
+        return (string) $value;
     }
 
     /**
