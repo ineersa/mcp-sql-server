@@ -352,6 +352,23 @@ cp libgliner_rs_php.so /usr/local/lib/php/extensions/
 echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner.ini
 ```
 
+### Supported PII Types
+
+The system detects **64 entity types** across 8 categories:
+
+| Category              | Entity Types                                                                                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Personal**          | `first_name`, `last_name`, `name`, `date_of_birth`, `age`, `gender`, `sexuality`, `race_ethnicity`, `religious_belief`, `political_view`, `occupation`, `employment_status`, `education_level` |
+| **Contact**           | `email`, `phone_number`, `street_address`, `city`, `county`, `state`, `country`, `coordinate`, `zip_code`, `po_box`                                                                            |
+| **Financial**         | `credit_debit_card`, `cvv`, `bank_routing_number`, `account_number`, `iban`, `swift_bic`, `pin`, `ssn`, `tax_id`, `ein`                                                                        |
+| **Government**        | `passport_number`, `driver_license`, `license_plate`, `national_id`, `voter_id`                                                                                                                |
+| **Digital/Technical** | `ipv4`, `ipv6`, `mac_address`, `url`, `user_name`, `password`, `device_identifier`, `imei`, `serial_number`, `api_key`, `secret_key`                                                           |
+| **Healthcare/PHI**    | `medical_record_number`, `health_plan_beneficiary_number`, `blood_type`, `biometric_identifier`, `health_condition`, `medication`, `insurance_policy_number`                                   |
+| **Temporal**          | `date`, `time`, `date_time`                                                                                                                                                                    |
+| **Organization**      | `company_name`, `employee_id`, `customer_id`, `certificate_license_number`, `vehicle_identifier`                                                                                               |
+
+> **Performance Tip:** Limit the `labels` config to only the entity types you need. Fewer labels = faster inference.
+
 ---
 
 ## Security
