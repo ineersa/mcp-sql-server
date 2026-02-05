@@ -15,6 +15,9 @@ use Symfony\Component\Yaml\Yaml;
 
 final class DoctrineConfigLoader
 {
+    private const string DEFAULT_TOKENIZER_PATH = 'models/tokenizer.json';
+    private const string DEFAULT_MODEL_PATH = 'models/model.onnx';
+
     /** @var array<string, array{name: string, type: string, version: ?string, pii_enabled: bool, connection: Connection}> */
     private array $connections = [];
 
@@ -26,6 +29,7 @@ final class DoctrineConfigLoader
 
     public function __construct(
         private LoggerInterface $logger,
+        private ModelDownloaderService $modelDownloader,
     ) {
     }
 
@@ -235,11 +239,7 @@ final class DoctrineConfigLoader
     /** @param mixed[] $config */
     private function loadPiiConfig(array $config): void
     {
-        if (!isset($config['pii'])) {
-            return;
-        }
-
-        $piiConfig = $config['pii'];
+        $piiConfig = $config['pii'] ?? [];
         if (!\is_array($piiConfig)) {
             throw new \RuntimeException('"pii" config section must be an array.');
         }
@@ -263,8 +263,19 @@ final class DoctrineConfigLoader
             ));
         }
 
+        // Set default paths if PII is enabled but paths not configured
         if ($this->hasAnyPiiEnabled() && !$this->hasPiiConfig()) {
-            $this->logger->warning('PII is enabled for connections but pii.tokenizer_path and pii.model_path are not configured.');
+            $this->tokenizerPath = $this->resolveRelativePath(self::DEFAULT_TOKENIZER_PATH);
+            $this->modelPath = $this->resolveRelativePath(self::DEFAULT_MODEL_PATH);
+            $this->logger->info('Using default model paths for PII detection', [
+                'tokenizer' => $this->tokenizerPath,
+                'model' => $this->modelPath,
+            ]);
+        }
+
+        // Auto-download models if PII is enabled and files don't exist
+        if ($this->hasAnyPiiEnabled() && $this->hasPiiConfig()) {
+            $this->modelDownloader->ensureModelsExist($this->tokenizerPath, $this->modelPath);
         }
     }
 

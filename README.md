@@ -93,7 +93,6 @@ doctrine:
             # MySQL with URL/DSN format and PII redaction enabled
             products:
                 url: "mysql://user:password@127.0.0.1:3306/mydb?serverVersion=8.0&charset=utf8mb4"
-                pii_enabled: true # Enable PII redaction for query results
 
             # PostgreSQL with environment variable
             users:
@@ -110,18 +109,6 @@ doctrine:
                 serverVersion: "2019"
                 options:
                     TrustServerCertificate: "yes"
-
-# Optional: PII configuration for GLiNER model (required if any connection has pii_enabled: true)
-pii:
-    tokenizer_path: "models/tokenizer.json"
-    model_path: "models/model.onnx"
-    threshold: 0.9 # Confidence threshold (0.0-1.0)
-    # Optional: Limit detection to specific entity types (uses all 64 types if omitted)
-    # labels:
-    #     - email
-    #     - phone_number
-    #     - ssn
-    #     - credit_debit_card
 ```
 
 #### Supported Databases
@@ -281,12 +268,12 @@ doctrine:
                 # pii_enabled defaults to false
 ```
 
-**2. Add PII configuration** (required if any connection has `pii_enabled: true`):
+**2. Optionally customize PII settings** (model files are auto-downloaded if paths not specified):
 
 ```yaml
 pii:
-    tokenizer_path: "models/tokenizer.json"
-    model_path: "models/model.onnx"
+    # tokenizer_path: "models/tokenizer.json"  # Optional: auto-downloaded if missing
+    # model_path: "models/model.onnx"          # Optional: auto-downloaded if missing
     threshold: 0.9 # Confidence threshold (0.0-1.0)
 
     # Optional: Limit detection to specific entity types for better performance
@@ -375,24 +362,38 @@ pii:
 
 ### Model Setup
 
-**Using Docker (included automatically):**
+**Automatic Download (Default):**
 
-The Docker image includes the GLiNER PHP extension. You only need to mount the model files:
+When PII detection is enabled and no custom model paths are configured, the server **automatically downloads** the required model files from Hugging Face on first startup:
+
+- `models/tokenizer.json` (~8MB)
+- `models/model.onnx` (~1.8GB)
+
+> ⚠️ **First Start Warning:** The initial download may take several minutes depending on your connection speed. Your MCP client may timeout on the first connection attempt. Simply retry after the download completes. Progress is logged to the application logs.
+
+**Using Docker:**
+
+The Docker image includes the GLiNER PHP extension. For auto-download, mount a writable models directory:
 
 ```yaml
 # docker-compose.yaml
 services:
     database-mcp:
         volumes:
-            - ./models:/app/models:ro # Mount GLiNER models
+            - ./models:/app/models # Writable for auto-download
 ```
 
-Download model files from [ineersa/gliner-PII-onnx](https://huggingface.co/ineersa/gliner-PII-onnx):
+**Custom Model Paths (Optional):**
 
-- `tokenizer.json` (~8MB)
-- `model.onnx` (~1.8GB)
+To use a different GLiNER ONNX model or store models in a custom location, specify the paths in your `databases.yaml`:
 
-**Manual installation:**
+```yaml
+pii:
+    tokenizer_path: "/custom/path/tokenizer.json"
+    model_path: "/custom/path/model.onnx"
+```
+
+**Manual Extension Installation (non-Docker):**
 
 Install the [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension:
 
