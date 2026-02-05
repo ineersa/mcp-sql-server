@@ -62,7 +62,7 @@ final class PIIAnalyzerService
         foreach ($rows as $row) {
             $values = [];
             foreach ($columns as $col) {
-                $values[] = $this->valueToString($row[$col] ?? null);
+                $values[] = $col.': '.$this->valueToString($row[$col] ?? null);
             }
             $rowStrings[] = implode(self::COL_SEP, $values);
         }
@@ -119,7 +119,14 @@ final class PIIAnalyzerService
                 $rowValues = explode(self::COL_SEP, $rowString);
                 $newRow = [];
                 foreach ($columns as $i => $colName) {
-                    $newRow[$colName] = $rowValues[$i] ?? '';
+                    $val = $rowValues[$i] ?? '';
+                    $prefix = $colName.': ';
+
+                    if (!str_starts_with($val, $prefix)) {
+                        throw new \RuntimeException(\sprintf('Redaction integrity check failed. Column "%s" prefix missing in value "%s".', $colName, $val));
+                    }
+
+                    $newRow[$colName] = substr($val, \strlen($prefix));
                 }
                 $finalRows[] = $newRow;
             }

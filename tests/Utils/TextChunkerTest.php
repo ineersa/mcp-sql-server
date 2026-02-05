@@ -100,10 +100,40 @@ class TextChunkerTest extends TestCase
     }
 
     #[Test]
+    public function itPrioritizesColonSpaceOverSpace(): void
+    {
+        // "col: value" - we want to split after ": " if forced, rather than at space inside value
+        // Note: strict validation means we prefer "col: " | "value" over "col: va" | "lue"
+        // But specifically vs whitespace:
+        // "Date: 2021-01-01 12:00:00"
+        // Space split (priority 4): "Date: 2021-01-01 " | "12:00:00" (Breaks datetime visual)
+        // Colon split (priority 3): "Date: " | "2021-01-01 12:00:00" (Keeps datetime atomic)
+
+        $text = 'Date: 2021-01-01 12:00:00';
+        // Length: 6 ("Date: ") + 19 ("2021-01-01 12:00:00") = 25 chars.
+        // Let's force split around 20 chars.
+        $maxLen = 20;
+
+        $chunks = TextChunker::splitTextSafely($text, $maxLen);
+
+        $this->assertCount(2, $chunks);
+        // Expect split after "Date: " because it's priority 3, found at index 4 (length 6).
+        // Whitespace found at index 16 ("...01 12...").
+        // But Colon is Priority 3.
+        // Wait. TextChunker looks back up to 100 chars.
+        // It finds BOTH ": " and " ".
+        // It should pick ": " because it's higher priority in the if/else chain.
+
+        $this->assertSame('Date: ', $chunks[0]);
+        $this->assertSame('2021-01-01 12:00:00', $chunks[1]);
+    }
+
+    #[Test]
     public function itReconstructsOriginalStringExactly(): void
     {
         $input = 'Here is a long string that definitely needs splitting because it is quite long and we set a small limit.
 It has newlines.
+It has col: values too.
 And '.self::ROW_SEP.' separators.
 And '.self::COL_SEP.' column separators.
 And meaningless words.';

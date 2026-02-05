@@ -71,16 +71,22 @@ class TextChunker
                 if (false !== $pos) {
                     $splitOffset = $searchStart + $pos + mb_strlen($colSep);
                 } else {
-                    // Priority 3: Whitespace
-                    $lastSpace = false;
-                    foreach ([' ', "\n", "\t", "\r"] as $char) {
-                        $p = mb_strrpos($window, $char);
-                        if (false !== $p && (false === $lastSpace || $p > $lastSpace)) {
-                            $lastSpace = $p;
+                    // Priority 3: Key-Value Separator ": "
+                    $pos = mb_strrpos($window, ': ');
+                    if (false !== $pos) {
+                        $splitOffset = $searchStart + $pos + 2; // Include ": "
+                    } else {
+                        // Priority 4: Whitespace
+                        $lastSpace = false;
+                        foreach ([' ', "\n", "\t", "\r"] as $char) {
+                            $p = mb_strrpos($window, $char);
+                            if (false !== $p && (false === $lastSpace || $p > $lastSpace)) {
+                                $lastSpace = $p;
+                            }
                         }
-                    }
-                    if (false !== $lastSpace) {
-                        $splitOffset = $searchStart + $lastSpace + 1; // Include space
+                        if (false !== $lastSpace) {
+                            $splitOffset = $searchStart + $lastSpace + 1; // Include space
+                        }
                     }
                 }
             }
