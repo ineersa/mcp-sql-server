@@ -16,7 +16,6 @@ A PHP/Symfony [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) s
 - [Available Tools](#available-tools)
 - [PII Detection & Redaction](#pii-detection--redaction)
     - [Enabling PII Protection](#enabling-pii-protection)
-    - [PII Discovery Command](#pii-discovery-command)
     - [Model Setup](#model-setup)
 - [Security](#security)
 - [Development](#development)
@@ -374,30 +373,6 @@ pii:
         # - vehicle_identifier
 ```
 
-### PII Discovery Command
-
-The `pii:discover` command scans your database tables to identify columns containing PII:
-
-```bash
-# Scan all tables in a connection
-php bin/console pii:discover --connection=production
-
-# Scan specific tables
-php bin/console pii:discover -c production --tables=users,customers
-
-# Customize sample size and confidence threshold
-php bin/console pii:discover -c production -s 100 --confidence-threshold=0.8
-```
-
-**Command Options:**
-
-| Option                   | Description                                          |
-| ------------------------ | ---------------------------------------------------- |
-| `-c, --connection`       | Database connection name to scan (required)          |
-| `-t, --tables`           | Comma-separated list of tables (default: all tables) |
-| `-s, --sample-size`      | Rows to sample per table (default: 50)               |
-| `--confidence-threshold` | Minimum score to flag as PII (default: 0.9)          |
-
 ### Model Setup
 
 **Using Docker (included automatically):**
@@ -488,7 +463,7 @@ composer docker-rebuild   # Rebuild without cache
 
 ```
 src/
-├── Command/        # Symfony console commands (including pii:discover)
+├── Command/        # Symfony console commands
 ├── Enum/           # PII entity types and groups
 ├── ReadOnly/       # DBAL middleware for read-only enforcement
 ├── Service/        # Core services (including PIIAnalyzerService)
