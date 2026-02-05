@@ -169,7 +169,14 @@ final class PIIAnalyzerService
             return $value->format('Y-m-d H:i:s');
         }
 
-        return (string) $value;
+        $str = (string) $value;
+
+        // Sanitize delimiters to prevent collision/injection
+        return str_replace(
+            [self::COL_SEP, self::ROW_SEP],
+            [' [SEP] ', ' [ROW_SEP] '],
+            $str
+        );
     }
 
     /**

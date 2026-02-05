@@ -27,25 +27,13 @@ class TextChunkerTest extends TestCase
     public function itSplitsAtRowSeparator(): void
     {
         // 10 chars + SEP (15 chars) + 10 chars
-        // Total 35 chars. Max len 20.
-        // Should split after SEP.
         $part1 = 'First_Part'; // 10
         $part2 = 'SecondPart'; // 10
         $text = $part1.self::ROW_SEP.$part2;
 
-        // SEP is ' <||ROW_SEP||> ' (15 chars)
-        // 10 + 15 = 25 chars.
-        // If Max is 25, it fits? No, max is chunk size.
-        // Let's set MaxLen to 26 so first part + sep fits comfortably.
-        // Wait, lookback is 100 in the code.
-        // If maxLen is small (e.g. 20), lookback of 100 goes to 0.
-
+        // maxLen 26 ensures part1 + sep fits (25 chars)
         $maxLen = 26;
         $chunks = TextChunker::splitTextSafely($text, $maxLen, self::ROW_SEP, self::COL_SEP);
-
-        // Expected:
-        // Chunk 1: "First_Part <||ROW_SEP||> " (Length 25)
-        // Chunk 2: "SecondPart"
 
         $this->assertCount(2, $chunks);
         $this->assertSame($part1.self::ROW_SEP, $chunks[0]);
@@ -59,7 +47,6 @@ class TextChunkerTest extends TestCase
         $part2 = 'Col2';
         $text = $part1.self::COL_SEP.$part2;
 
-        // Sep length 11.
         // "Col1 <||SEP||> " = 4 + 11 = 15 chars.
         // MaxLen 16.
         $maxLen = 16;
@@ -74,17 +61,9 @@ class TextChunkerTest extends TestCase
     #[Test]
     public function itSplitsAtWhitespaceIfNoSeparators(): void
     {
-        // "Hello World Again"
-        // MaxLen 11.
-        // "Hello World" is 11 chars.
-        // Should split after "World" (space is at 11? No "Hello World" is 11).
-        // Wait, "Hello World" is 11.
-        // If limit is 11.
-        // Target is 11. Lookback finds space at 5 ("Hello ").
-        // So expected split: "Hello " and "World Again".
-
         $text = 'Hello World Again';
-        $maxLen = 8; // "Hello Wo" -> cut at "Hello "
+        // "Hello Wo" -> cut at "Hello "
+        $maxLen = 8;
 
         $chunks = TextChunker::splitTextSafely($text, $maxLen);
 
@@ -102,7 +81,6 @@ class TextChunkerTest extends TestCase
 
         $chunks = TextChunker::splitTextSafely($text, $maxLen);
 
-        // Should be ABCDEFGHIJ, KLMNOPQRST, UVWXYZ
         $this->assertCount(3, $chunks);
         $this->assertSame('ABCDEFGHIJ', $chunks[0]);
         $this->assertSame('KLMNOPQRST', $chunks[1]);
@@ -112,53 +90,56 @@ class TextChunkerTest extends TestCase
     #[Test]
     public function itPrioritizesRowOverColOverSpace(): void
     {
-        // Construct text with all 3 in the lookback window
-        // safe window
-        $text = 'Data'.self::COL_SEP.' '.self::ROW_SEP.'End';
-        //       4    + 11             + 1 + 15              + 3 = 34 chars approx
-
-        // Set maxLen such that all are within reach.
-        // "Data <||SEP||>  <||ROW_SEP||> " = 4+11+1+15 = 31 chars.
-        // MaxLen 32.
-
-        // It should take the ROW_SEP because it's priority 1, and it's last?
-        // The code uses `mb_strrpos` (last occurrence).
-        // Row Sep is last in string.
-        // So it naturally wins if it fits.
-
-        // Let's invert order to test priority.
-        // "Data" . ROW_SEP . " " . COL_SEP . "End"
-        // If we split at COL_SEP, we cut late.
-        // If we split at ROW_SEP, we cut early.
-        // Logic: find LAST occurrence of Priority 1.
-        // If found, use it.
-        // If not, find LAST occurrence of Priority 2.
-
         $text = 'Data'.self::ROW_SEP.'Mid'.self::COL_SEP.'End';
-        // ROW_SEP at index 4.
-        // COL_SEP at index 4+15+3 = 22.
-        // Full string len = 22 + 11 + 3 = 36.
-
-        // MaxLen 35.
-        // Window includes both.
-        // Code checks ROW_SEP first. `mb_strrpos` finds it at 4.
-        // Code checks COL_SEP (only if ROW_SEP not found? NO).
-        // Code: if (false !== $pos) { splitOffset = ... } else { check ColSep }
-        // So ROW_SEP takes precedence IF IT EXISTS in the window.
-        // Wait, if ROW_SEP exists at index 4, and COL_SEP at 22...
-        // And window covers 0 to 35.
-        // Logic says: `pos = mb_strrpos($window, ROW_SEP)`. It finds index 4.
-        // So it splits at 4 + len.
-        // It IGNORIES COL_SEP at 22!
-        // So it creates a small chunk: "Data <||ROW_SEP||> ".
-        // And next chunk starts with "Mid...".
-        // This is arguably correct ("Row separator is the ultimate boundary").
-
+        // MaxLen large enough to cover Lookback
         $maxLen = 35;
         $chunks = TextChunker::splitTextSafely($text, $maxLen, self::ROW_SEP, self::COL_SEP);
 
         $this->assertEquals('Data'.self::ROW_SEP, $chunks[0]);
-        // Rest is "Mid <||SEP||> End"
         $this->assertEquals('Mid'.self::COL_SEP.'End', $chunks[1]);
+    }
+
+    #[Test]
+    public function itReconstructsOriginalStringExactly(): void
+    {
+        $input = 'Here is a long string that definitely needs splitting because it is quite long and we set a small limit.
+It has newlines.
+And '.self::ROW_SEP.' separators.
+And '.self::COL_SEP.' column separators.
+And meaningless words.';
+
+        $maxLen = 20;
+
+        $chunks = TextChunker::splitTextSafely($input, $maxLen, self::ROW_SEP, self::COL_SEP);
+
+        $reconstructed = implode('', $chunks);
+
+        $this->assertSame($input, $reconstructed, 'Reconstructed string should match original exactly');
+    }
+
+    #[Test]
+    public function itHandlesMultibyteCharactersCorrectly(): void
+    {
+        // 5 chars: "He" (2) + "llo" (3) -> but "llo" replaced with multibyte.
+        // "He" . "llö" ?
+        // Let's use simpler: "A" . "😊" . "B"
+        // 😊 is 1 char (mb), 4 bytes.
+
+        $text = 'Start😊End';
+        // "Start" = 5 chars. "😊" = 1 char. "End" = 3 chars. Total 9 chars.
+
+        $maxLen = 6;
+        // Should take "Start😊" (6 chars)?
+        // Wait, standard says "Start" (5) + "😊" (1) = 6 chars.
+        // If hard split at 6.
+
+        $chunks = TextChunker::splitTextSafely($text, $maxLen);
+
+        // Expected: "Start😊", "End"
+        $this->assertCount(2, $chunks);
+        $this->assertSame('Start😊', $chunks[0]);
+        $this->assertSame('End', $chunks[1]);
+
+        $this->assertSame($text, implode('', $chunks));
     }
 }
