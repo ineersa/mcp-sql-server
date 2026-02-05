@@ -1,34 +1,9 @@
 {
-    "content": [
-        {
-            "type": "text",
-            "text": "## Query 1\n```sql\nSELECT * FROM users ORDER BY id LIMIT 10\n```\n### Count\n3\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Diana | [REDACTED_email] |\n| 2 | Eve | [REDACTED_email] |\n| 3 | Frank | [REDACTED_email] |\n\n"
-        }
-    ],
-    "structuredContent": {
-        "results": [
-            {
-                "query": "SELECT * FROM users ORDER BY id LIMIT 10",
-                "count": 3,
-                "rows": [
-                    {
-                        "id": "1",
-                        "name": "Diana",
-                        "email": "[REDACTED_email]"
-                    },
-                    {
-                        "id": "2",
-                        "name": "Eve",
-                        "email": "[REDACTED_email]"
-                    },
-                    {
-                        "id": "3",
-                        "name": "Frank",
-                        "email": "[REDACTED_email]"
-                    }
-                ]
-            }
-        ]
-    },
-    "isError": false
+  "content": [
+    {
+      "type": "text",
+      "text": "[3]{id,name,email}:\n  \"1\",Diana,\"[REDACTED_email]\"\n  \"2\",Eve,\"[REDACTED_email]\"\n  \"3\",Frank,\"[REDACTED_email]\""
+    }
+  ],
+  "isError": false
 }

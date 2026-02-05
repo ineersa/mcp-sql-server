@@ -7,6 +7,7 @@ namespace App\Tools;
 use App\Service\DoctrineConfigLoader;
 use App\Service\PIIAnalyzerService;
 use App\Service\SafeQueryExecutor;
+use HelgeSverre\Toon\Toon;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
 use Psr\Log\LoggerInterface;
@@ -54,7 +55,7 @@ DESCRIPTION;
         string $query,
     ): CallToolResult {
         $queries = $this->splitSql($query);
-        $results = [];
+        $rows = [];
 
         try {
             $conn = $this->doctrineConfigLoader->getConnection($connection);
@@ -69,24 +70,15 @@ DESCRIPTION;
                 if ($piiEnabled && [] !== $rows) {
                     $rows = $this->piiAnalyzerService->redact($rows);
                 }
-
-                $count = \count($rows);
-
-                $results[] = [
-                    'query' => $singleQuery,
-                    'count' => $count,
-                    'rows' => $rows,
-                ];
             }
 
-            $markdown = $this->formatResultsToMarkdown($results);
+            $result = Toon::encode($rows);
 
             return new CallToolResult(
                 content: [
-                    new TextContent($markdown),
+                    new TextContent($result),
                 ],
                 isError: false,
-                structuredContent: ['results' => $results],
             );
         } catch (\Throwable $e) {
             $this->logger->error('Query execution failed', [
@@ -289,67 +281,6 @@ DESCRIPTION;
         }
 
         return $rows;
-    }
-
-    /** @param array<int, array<string, mixed>> $results */
-    private function formatResultsToMarkdown(array $results): string
-    {
-        $markdown = '';
-
-        foreach ($results as $index => $result) {
-            $markdown .= '## Query '.($index + 1)."\n";
-            $markdown .= "```sql\n".$result['query']."\n```\n";
-
-            if (isset($result['error'])) {
-                $markdown .= '**Error:** '.$result['error']."\n\n";
-                continue;
-            }
-
-            $markdown .= "### Count\n".$result['count']."\n\n";
-
-            if (empty($result['rows'])) {
-                $markdown .= "No results.\n\n";
-                continue;
-            }
-
-            $markdown .= "### Rows\n";
-            $markdown .= $this->arrayToMarkdownTable($result['rows']);
-            $markdown .= "\n";
-        }
-
-        return $markdown;
-    }
-
-    /** @param array<int, array<string, mixed>> $rows */
-    private function arrayToMarkdownTable(array $rows): string
-    {
-        if (empty($rows)) {
-            return '';
-        }
-
-        $headers = array_keys($rows[0]);
-
-        $table = '| '.implode(' | ', $headers)." |\n";
-
-        $table .= '| '.implode(' | ', array_map(fn () => '---', $headers))." |\n";
-
-        foreach ($rows as $row) {
-            $table .= '| '.implode(' | ', array_map(function ($val) {
-                if (null === $val) {
-                    return 'NULL';
-                }
-                if (\is_bool($val)) {
-                    return $val ? 'true' : 'false';
-                }
-                if (\is_array($val) || \is_object($val)) {
-                    return json_encode($val);
-                }
-
-                return str_replace('|', "\|", (string) $val);
-            }, $row))." |\n";
-        }
-
-        return $table;
     }
 
     private function validateQuery(string $query): void

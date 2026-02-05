@@ -173,7 +173,7 @@ final class PIIAnalyzerService
             return 'false';
         }
         if ($value instanceof \DateTimeInterface) {
-            return $value->format('Y-m-d H:i:s');
+            return "'".$value->format('Y-m-d H:i:s')."'";
         }
 
         $str = (string) $value;
