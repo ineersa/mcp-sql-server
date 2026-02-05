@@ -248,13 +248,29 @@ Executes read-only SQL queries against a specified database connection.
 
 ## PII Detection & Redaction
 
-This server includes built-in PII (Personally Identifiable Information) detection and redaction using the [GLiNER-PII ONNX model](https://huggingface.co/ineersa/gliner-PII-onnx) via the native [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension.
+This server includes built-in PII (Personally Identifiable Information) detection and redaction using GLiNER models in ONNX format via the native [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension.
 
-### Enabling PII Protection
+### 1. Download Models
 
-PII redaction is configured per-connection. When enabled, query results are automatically scanned and sensitive data is replaced with `[REDACTED_type]` markers (e.g., `[REDACTED_email]`, `[REDACTED_ssn]`).
+The server supports any GLiNER model in ONNX format. While any compatible model can be used, we recommend and provide a helper for our tested [GLiNER PII ONNX](https://huggingface.co/ineersa/gliner-PII-onnx) model (~1.8GB).
 
-**1. Enable on specific connections** in your `databases.yaml`:
+**Using Docker (Recommended):**
+
+```bash
+docker compose run --rm download-models
+```
+
+**Using PHP:**
+
+```bash
+php bin/console download-models
+```
+
+This downloads `model.onnx` and `tokenizer.json` to your local `./models` directory.
+
+### 2. Enable on Specific Connections
+
+PII redaction is configured per-connection in your `databases.yaml`. When enabled, query results are automatically scanned and sensitive data is replaced with `[REDACTED_type]` markers (e.g., `[REDACTED_email]`, `[REDACTED_ssn]`).
 
 ```yaml
 doctrine:
@@ -268,133 +284,113 @@ doctrine:
                 # pii_enabled defaults to false
 ```
 
-**2. Optionally customize PII settings** (model files are auto-downloaded if paths not specified):
+### 3. Optionally Customize PII Settings
+
+You can fine-tune the detection threshold and entity types in your `databases.yaml`:
 
 ```yaml
 pii:
-    # tokenizer_path: "models/tokenizer.json"  # Optional: auto-downloaded if missing
-    # model_path: "models/model.onnx"          # Optional: auto-downloaded if missing
     threshold: 0.9 # Confidence threshold (0.0-1.0)
 
-    # Optional: Limit detection to specific entity types for better performance
-    # Uses all 64 types below if omitted
-    labels:
-        # Personal
-        # - first_name
-        # - last_name
-        # - name
-        # - date_of_birth
-        # - age
-        # - gender
-        # - sexuality
-        # - race_ethnicity
-        # - religious_belief
-        # - political_view
-        # - occupation
-        # - employment_status
-        # - education_level
+    # Optional: Custom model paths (defaults to models/ in project root)
+    # tokenizer_path: "models/tokenizer.json"
+    # model_path: "models/model.onnx"
 
-        # Contact
+    # Optional: Limit detection to specific entity types for better performance
+    labels:
         - email
         - phone_number
-        # - street_address
-        # - city
-        # - county
-        # - state
-        # - country
-        # - coordinate
-        # - zip_code
-        # - po_box
-
-        # Financial
         - credit_debit_card
-        # - cvv
-        # - bank_routing_number
-        # - account_number
-        # - iban
-        # - swift_bic
-        # - pin
         - ssn
-        # - tax_id
-        # - ein
-
-        # Government
-        # - passport_number
-        # - driver_license
-        # - license_plate
-        # - national_id
-        # - voter_id
-
-        # Digital/Technical
-        # - ipv4
-        # - ipv6
-        # - mac_address
-        # - url
-        # - user_name
-        # - password
-        # - device_identifier
-        # - imei
-        # - serial_number
-        # - api_key
-        # - secret_key
-
-        # Healthcare/PHI
-        # - medical_record_number
-        # - health_plan_beneficiary_number
-        # - blood_type
-        # - biometric_identifier
-        # - health_condition
-        # - medication
-        # - insurance_policy_number
-
-        # Temporal
-        # - date
-        # - time
-        # - date_time
-
-        # Organization
-        # - company_name
-        # - employee_id
-        # - customer_id
-        # - certificate_license_number
-        # - vehicle_identifier
 ```
 
-### Model Setup
-
-### Model Setup
-
-The server uses the GLiNER PII ONNX model (~1.8GB) for detection. These models must be present for PII detection to work.
-
-**1. Download Models:**
-
-You can download the models using the included helper command. This is recommended to avoid startup timeouts.
-
-**Using Docker (Recommended):**
-
-```bash
-docker compose run --rm download-models
-```
-
-This downloads `model.onnx` and `tokenizer.json` to your local `./models` directory.
-
-**Using PHP:**
-
-```bash
-php bin/console download-models
-```
-
-**2. Configure Paths (Optional):**
-
-By default, the server looks for models in `models/` (relative to project root).
-
-To use custom paths:
+<details>
+<summary>View all 64 supported PII labels</summary>
 
 ```yaml
-pii:
-    tokenizer_path: "/custom/path/tokenizer.json"
-    model_path: "/custom/path/model.onnx"
+labels:
+    # Personal
+    # - first_name
+    # - last_name
+    # - name
+    # - date_of_birth
+    # - age
+    # - gender
+    # - sexuality
+    # - race_ethnicity
+    # - religious_belief
+    # - political_view
+    # - occupation
+    # - employment_status
+    # - education_level
+
+    # Contact
+    - email
+    - phone_number
+    # - street_address
+    # - city
+    # - county
+    # - state
+    # - country
+    # - coordinate
+    # - zip_code
+    # - po_box
+
+    # Financial
+    - credit_debit_card
+    # - cvv
+    # - bank_routing_number
+    # - account_number
+    # - iban
+    # - swift_bic
+    # - pin
+    - ssn
+    # - tax_id
+    # - ein
+
+    # Government
+    # - passport_number
+    # - driver_license
+    # - license_plate
+    # - national_id
+    # - voter_id
+
+    # Digital/Technical
+    # - ipv4
+    # - ipv6
+    # - mac_address
+    # - url
+    # - user_name
+    # - password
+    # - device_identifier
+    # - imei
+    # - serial_number
+    # - api_key
+    # - secret_key
+
+    # Healthcare/PHI
+    # - medical_record_number
+    # - health_plan_beneficiary_number
+    # - blood_type
+    # - biometric_identifier
+    # - health_condition
+    # - medication
+    # - insurance_policy_number
+
+    # Temporal
+    # - date
+    # - time
+    # - date_time
+
+    # Organization
+    # - company_name
+    # - employee_id
+    # - customer_id
+    # - certificate_license_number
+    # - vehicle_identifier
 ```
+
+</details>
 
 **Manual Extension Installation (non-Docker):**
 
