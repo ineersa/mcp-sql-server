@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Enum\PIILabel;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
@@ -142,10 +143,15 @@ final class DoctrineConfigLoader
         return $this->threshold ?? 0.9;
     }
 
-    /** @return list<string>|null */
-    public function getLabels(): ?array
+    /** @return list<string> */
+    public function getLabels(): array
     {
-        return $this->labels;
+        return $this->labels ?? PIILabel::getAllValues();
+    }
+
+    public function setThreshold(float $threshold): void
+    {
+        $this->threshold = $threshold;
     }
 
     private function getConfigFilePath(): string

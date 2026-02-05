@@ -93,8 +93,10 @@ class PIIDiscoveryCommand extends Command
         $this->doctrineConfigLoader->loadAndValidate();
 
         $thresholdOption = $input->getOption('confidence-threshold');
+
         if (null !== $thresholdOption) {
             $threshold = (float) $thresholdOption;
+            $this->doctrineConfigLoader->setThreshold($threshold);
         } else {
             $threshold = $this->doctrineConfigLoader->getThreshold();
         }
@@ -178,7 +180,7 @@ class PIIDiscoveryCommand extends Command
                     $data = array_map('array_values', $rows);
 
                     // Analyze with GLiNER
-                    $analysis = $this->piiAnalyzer->analyze($tableName, $columns, $data, $threshold);
+                    $analysis = $this->piiAnalyzer->analyze($tableName, $columns, $data);
 
                     $io->writeln('Done');
 

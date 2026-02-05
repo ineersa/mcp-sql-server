@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Enum\PIILabel;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -36,13 +35,12 @@ final class PIIAnalyzerService
      * @param string            $tableName Name of the table being analyzed
      * @param list<string>      $columns   Column names
      * @param list<list<mixed>> $data      Row data (array of rows, each row is array of values)
-     * @param float             $threshold Confidence threshold (0.0-1.0)
      *
      * @return array{results: array<string, list<string>>, samples: array<string, string>}
      *
      * @throws \RuntimeException if analysis fails
      */
-    public function analyze(string $tableName, array $columns, array $data, float $threshold = 0.9): array
+    public function analyze(string $tableName, array $columns, array $data): array
     {
         if ([] === $data || [] === $columns) {
             return ['results' => [], 'samples' => []];
@@ -51,7 +49,6 @@ final class PIIAnalyzerService
         $this->ensureModelLoaded();
 
         $columnTexts = $this->collectColumnTexts($columns, $data);
-        $labels = $this->configLoader->getLabels() ?? PIILabel::getAllValues();
 
         /** @var array<string, list<string>> $results */
         $results = [];
@@ -65,7 +62,7 @@ final class PIIAnalyzerService
             }
 
             try {
-                $columnLabels = $this->analyzeTexts($texts, $labels, $threshold);
+                $columnLabels = $this->analyzeTexts($texts);
 
                 if ([] !== $columnLabels) {
                     $results[$columnName] = array_keys($columnLabels);
@@ -91,14 +88,13 @@ final class PIIAnalyzerService
      * Processes all texts across all columns in a single batch per chunk
      * to minimize inference calls. Rows are chunked to keep memory manageable.
      *
-     * @param list<array<string, mixed>> $rows      Query result rows to redact
-     * @param float                      $threshold Confidence threshold (0.0-1.0)
+     * @param list<array<string, mixed>> $rows Query result rows to redact
      *
      * @return list<array<string, mixed>> Rows with PII values replaced by [REDACTED_type]
      *
      * @throws \RuntimeException if redaction fails
      */
-    public function redact(array $rows, float $threshold = 0.9): array
+    public function redact(array $rows): array
     {
         if ([] === $rows) {
             return [];
@@ -106,14 +102,12 @@ final class PIIAnalyzerService
 
         $this->ensureModelLoaded();
 
-        $labels = $this->configLoader->getLabels() ?? PIILabel::getAllValues();
-
         // Process in chunks to keep memory manageable
         $redactedRows = [];
         $chunks = array_chunk($rows, self::REDACT_ROW_CHUNK_SIZE);
 
         foreach ($chunks as $chunkRows) {
-            $redactedRows = [...$redactedRows, ...$this->redactRowChunk($chunkRows, $labels, $threshold)];
+            $redactedRows = [...$redactedRows, ...$this->redactRowChunk($chunkRows)];
         }
 
         return $redactedRows;
@@ -122,13 +116,11 @@ final class PIIAnalyzerService
     /**
      * Redact PII from a chunk of rows using a single batch call.
      *
-     * @param list<array<string, mixed>> $rows      Rows to process
-     * @param list<string>               $labels    PII labels to detect
-     * @param float                      $threshold Confidence threshold
+     * @param list<array<string, mixed>> $rows Rows to process
      *
      * @return list<array<string, mixed>> Redacted rows
      */
-    private function redactRowChunk(array $rows, array $labels, float $threshold): array
+    private function redactRowChunk(array $rows): array
     {
         if ([] === $rows) {
             return [];
@@ -159,7 +151,7 @@ final class PIIAnalyzerService
         $redactedRows = $rows;
 
         try {
-            $redactedTexts = $this->redactTexts($allTexts, $labels, $threshold);
+            $redactedTexts = $this->redactTexts($allTexts);
 
             // Map redacted texts back to their original positions
             foreach ($redactedTexts as $i => $redactedText) {
@@ -208,14 +200,14 @@ final class PIIAnalyzerService
     /**
      * Analyze texts and return detected labels with sample indices.
      *
-     * @param list<string> $texts     Texts to analyze
-     * @param list<string> $labels    PII labels to detect
-     * @param float        $threshold Confidence threshold
+     * @param list<string> $texts Texts to analyze
      *
      * @return array<string, int> Map of label => first sample index
      */
-    private function analyzeTexts(array $texts, array $labels, float $threshold): array
+    private function analyzeTexts(array $texts): array
     {
+        $labels = $this->configLoader->getLabels();
+        $threshold = $this->configLoader->getThreshold();
         /** @var array<string, int> $detectedLabels */
         $detectedLabels = [];
         $predictions = $this->gliner->predictBatch($texts, $labels);
@@ -237,14 +229,15 @@ final class PIIAnalyzerService
     /**
      * Redact PII from texts.
      *
-     * @param list<string> $texts     Texts to redact
-     * @param list<string> $labels    PII labels to detect
-     * @param float        $threshold Confidence threshold
+     * @param list<string> $texts Texts to redact
      *
      * @return list<string> Redacted texts
      */
-    private function redactTexts(array $texts, array $labels, float $threshold): array
+    private function redactTexts(array $texts): array
     {
+        $labels = $this->configLoader->getLabels();
+        $threshold = $this->configLoader->getThreshold();
+
         $redacted = $texts;
 
         $predictions = $this->gliner->predictBatch($texts, $labels);

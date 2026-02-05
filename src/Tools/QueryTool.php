@@ -67,7 +67,7 @@ DESCRIPTION;
                 $rows = $this->truncateLongTextRows($rows);
 
                 if ($piiEnabled && [] !== $rows) {
-                    $rows = $this->piiAnalyzerService->redact($rows, $this->doctrineConfigLoader->getThreshold());
+                    $rows = $this->piiAnalyzerService->redact($rows);
                 }
 
                 $count = \count($rows);

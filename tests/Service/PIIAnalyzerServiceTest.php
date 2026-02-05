@@ -45,7 +45,7 @@ class PIIAnalyzerServiceTest extends TestCase
         ];
 
         // Pass 0.4 threshold explicitly for tests
-        $redacted = self::$sharedAnalyzer->redact($rows, 0.4);
+        $redacted = self::$sharedAnalyzer->redact($rows);
 
         $this->assertCount(2, $redacted);
         $this->assertSame('1', $redacted[0]['id']);
@@ -77,7 +77,7 @@ class PIIAnalyzerServiceTest extends TestCase
             ['c' => $longText.' Contact: bob@example.com'], // Long with email PII
         ];
 
-        $redacted = self::$sharedAnalyzer->redact($rows, 0.4);
+        $redacted = self::$sharedAnalyzer->redact($rows);
 
         $this->assertCount(4, $redacted);
         $this->assertSame($shortText, $redacted[0]['c']); // No PII
