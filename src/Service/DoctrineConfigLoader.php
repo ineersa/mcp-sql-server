@@ -29,7 +29,6 @@ final class DoctrineConfigLoader
 
     public function __construct(
         private LoggerInterface $logger,
-        private ModelDownloaderService $modelDownloader,
     ) {
     }
 
@@ -273,9 +272,11 @@ final class DoctrineConfigLoader
             ]);
         }
 
-        // Auto-download models if PII is enabled and files don't exist
+        // Check if models exist if PII is enabled
         if ($this->hasAnyPiiEnabled() && $this->hasPiiConfig()) {
-            $this->modelDownloader->ensureModelsExist($this->tokenizerPath, $this->modelPath);
+            if (!file_exists($this->tokenizerPath) || !file_exists($this->modelPath)) {
+                throw new \RuntimeException(\sprintf('PII detection is enabled but model files are missing. Please run "bin/console download-models" (or "composer console -- download-models" if using Docker) to download them to "%s" and "%s".', $this->tokenizerPath, $this->modelPath));
+            }
         }
     }
 

@@ -19,8 +19,8 @@ services:
             - ./databases.yaml:/config/databases.yaml:ro
             # Mount log directory to view logs
             - ./log:/tmp/database-mcp/log
-            # Optional: Mount GLiNER models for PII detection (if pii_enabled: true in databases.yaml)
-            # - ./models:/app/models:ro
+            # Mount GLiNER models for PII detection (required if pii_enabled: true)
+            - ./models:/app/models:ro
 
     # Log viewer - Use to view logs from the MCP server
     # Run with: docker compose run --rm logs
@@ -35,3 +35,13 @@ services:
             - ./log:/tmp/database-mcp/log:ro
         profiles:
             - logs
+
+    # Model Downloader - Use to download PII detection models
+    # Run with: docker compose run --rm download-models
+    download-models:
+        image: ineersa/database-mcp:latest
+        platform: linux/amd64
+        entrypoint: ["php", "/app/bin/console", "download-models"]
+        volumes:
+            # Mount models directory to persist downloaded files
+            - ./models:/app/models

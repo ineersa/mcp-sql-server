@@ -362,30 +362,33 @@ pii:
 
 ### Model Setup
 
-**Automatic Download (Default):**
+### Model Setup
 
-When PII detection is enabled and no custom model paths are configured, the server **automatically downloads** the required model files from Hugging Face on first startup:
+The server uses the GLiNER PII ONNX model (~1.8GB) for detection. These models must be present for PII detection to work.
 
-- `models/tokenizer.json` (~8MB)
-- `models/model.onnx` (~1.8GB)
+**1. Download Models:**
 
-> ⚠️ **First Start Warning:** The initial download may take several minutes depending on your connection speed. Your MCP client may timeout on the first connection attempt. Simply retry after the download completes. Progress is logged to the application logs.
+You can download the models using the included helper command. This is recommended to avoid startup timeouts.
 
-**Using Docker:**
+**Using Docker (Recommended):**
 
-The Docker image includes the GLiNER PHP extension. For auto-download, mount a writable models directory:
-
-```yaml
-# docker-compose.yaml
-services:
-    database-mcp:
-        volumes:
-            - ./models:/app/models # Writable for auto-download
+```bash
+docker compose run --rm download-models
 ```
 
-**Custom Model Paths (Optional):**
+This downloads `model.onnx` and `tokenizer.json` to your local `./models` directory.
 
-To use a different GLiNER ONNX model or store models in a custom location, specify the paths in your `databases.yaml`:
+**Using PHP:**
+
+```bash
+php bin/console download-models
+```
+
+**2. Configure Paths (Optional):**
+
+By default, the server looks for models in `models/` (relative to project root).
+
+To use custom paths:
 
 ```yaml
 pii:

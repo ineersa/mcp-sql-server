@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Service\DoctrineConfigLoader;
-use App\Service\ModelDownloaderService;
 use App\Service\PIIAnalyzerService;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -30,7 +29,6 @@ class PIIAnalyzerServiceTest extends TestCase
     {
         $this->configLoader = new DoctrineConfigLoader(
             new NullLogger(),
-            new ModelDownloaderService(new NullLogger()),
         );
         $this->configLoader->loadAndValidate();
 

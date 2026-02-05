@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Service\DoctrineConfigLoader;
-use App\Service\ModelDownloaderService;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -17,7 +16,6 @@ final class DoctrineConfigLoaderTest extends TestCase
     private string $tempDir;
     private string $configFile;
     private LoggerInterface $logger;
-    private ModelDownloaderService $modelDownloader;
     private ?string $originalDatabaseConfigFile = null;
 
     protected function setUp(): void
@@ -31,7 +29,6 @@ final class DoctrineConfigLoaderTest extends TestCase
         $this->configFile = $this->tempDir.'/doctrine.yaml';
 
         $this->logger = $this->createStub(LoggerInterface::class);
-        $this->modelDownloader = new ModelDownloaderService(new \Psr\Log\NullLogger());
     }
 
     protected function tearDown(): void
@@ -53,7 +50,7 @@ final class DoctrineConfigLoaderTest extends TestCase
     {
         unset($_ENV['DATABASE_CONFIG_FILE']);
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('DATABASE_CONFIG_FILE environment variable is not set.');
@@ -65,7 +62,7 @@ final class DoctrineConfigLoaderTest extends TestCase
     {
         $_ENV['DATABASE_CONFIG_FILE'] = '/nonexistent/file.yaml';
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Doctrine config file');
@@ -78,7 +75,7 @@ final class DoctrineConfigLoaderTest extends TestCase
         file_put_contents($this->configFile, 'invalid yaml: [unclosed');
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to parse YAML config');
@@ -91,7 +88,7 @@ final class DoctrineConfigLoaderTest extends TestCase
         file_put_contents($this->configFile, 'other: config');
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('must contain "doctrine.dbal" section');
@@ -108,7 +105,7 @@ doctrine:
 YAML);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('No database connections defined');
@@ -127,7 +124,7 @@ doctrine:
 YAML);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to create connection');
@@ -144,7 +141,7 @@ doctrine:
 YAML);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Environment variable "MISSING_VAR" is not defined');
@@ -154,7 +151,7 @@ YAML);
 
     public function testGetConnectionThrowsExceptionForNonExistentConnection(): void
     {
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Connection "nonexistent" is not configured');
@@ -164,7 +161,7 @@ YAML);
 
     public function testGetConnectionNamesReturnsEmptyArrayWhenNotLoaded(): void
     {
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $names = $loader->getConnectionNames();
 
@@ -173,7 +170,7 @@ YAML);
 
     public function testGetAllConnectionsReturnsEmptyArrayWhenNotLoaded(): void
     {
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $connections = $loader->getAllConnections();
 
@@ -182,7 +179,7 @@ YAML);
 
     public function testGetConnectionTypeReturnsNullForNonExistentConnection(): void
     {
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $type = $loader->getConnectionType('nonexistent');
 
@@ -191,7 +188,7 @@ YAML);
 
     public function testGetConnectionVersionReturnsNullForNonExistentConnection(): void
     {
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $version = $loader->getConnectionVersion('nonexistent');
 
@@ -207,7 +204,7 @@ doctrine:
 YAML);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('"doctrine.dbal.connections" must be an array');
@@ -226,7 +223,7 @@ test_var: "%env(DB_HOST)%"
 test_var2: "%env(DB_NAME)%"
 YAML);
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('must contain "doctrine.dbal" section');
@@ -251,7 +248,7 @@ YAML;
         file_put_contents($this->configFile, $configWithOptions);
         $_ENV['DATABASE_CONFIG_FILE'] = $this->configFile;
 
-        $loader = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader = new DoctrineConfigLoader($this->logger);
         $loader->loadAndValidate();
 
         $connection = $loader->getConnection('test');
@@ -272,7 +269,7 @@ YAML;
 
         file_put_contents($this->configFile, $configWithDriverOptions);
 
-        $loader2 = new DoctrineConfigLoader($this->logger, $this->modelDownloader);
+        $loader2 = new DoctrineConfigLoader($this->logger);
         $loader2->loadAndValidate();
 
         $connection2 = $loader2->getConnection('test2');

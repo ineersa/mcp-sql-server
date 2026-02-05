@@ -154,7 +154,7 @@ final class QueryToolMultipleQueriesTest extends InspectorSnapshotTestCase
 
         $logger = new \Psr\Log\NullLogger();
         $modelDownloader = new \App\Service\ModelDownloaderService($logger);
-        $loader = new \App\Service\DoctrineConfigLoader($logger, $modelDownloader);
+        $loader = new \App\Service\DoctrineConfigLoader($logger);
         $loader->loadAndValidate();
 
         foreach ($loader->getAllConnections() as $name => $connection) {
