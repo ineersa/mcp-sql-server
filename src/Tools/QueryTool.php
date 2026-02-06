@@ -56,6 +56,7 @@ DESCRIPTION;
     ): CallToolResult {
         $queries = $this->splitSql($query);
         $rows = [];
+        $result = '';
 
         try {
             $conn = $this->doctrineConfigLoader->getConnection($connection);
@@ -68,11 +69,11 @@ DESCRIPTION;
                 $rows = $this->truncateLongTextRows($rows);
 
                 if ($piiEnabled && [] !== $rows) {
-                    $rows = $this->piiAnalyzerService->redact($rows);
+                    $result = $this->piiAnalyzerService->redact($rows);
+                } else {
+                    $result = Toon::encode($rows);
                 }
             }
-
-            $result = Toon::encode($rows);
 
             return new CallToolResult(
                 content: [

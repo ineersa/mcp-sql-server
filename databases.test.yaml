@@ -23,7 +23,7 @@ doctrine:
 pii:
     tokenizer_path: "models/tokenizer.json"
     model_path: "models/model.onnx"
-    threshold: 0.8
+    threshold: 0.6
     labels:
         - email
         - city

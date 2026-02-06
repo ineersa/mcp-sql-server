@@ -143,7 +143,7 @@ final class DoctrineConfigLoader
 
     public function getThreshold(): float
     {
-        return $this->threshold ?? 0.9;
+        return $this->threshold ?? 0.6;
     }
 
     /** @return list<string> */

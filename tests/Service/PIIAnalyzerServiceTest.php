@@ -6,6 +6,7 @@ namespace App\Tests\Service;
 
 use App\Service\DoctrineConfigLoader;
 use App\Service\PIIAnalyzerService;
+use HelgeSverre\Toon\Toon;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -49,11 +50,11 @@ class PIIAnalyzerServiceTest extends TestCase
             ['id' => 2, 'text' => 'Safe text without PII'],
         ];
 
-        // Pass 0.4 threshold explicitly for tests
-        $redacted = self::$sharedAnalyzer->redact($rows);
+        $toonResult = self::$sharedAnalyzer->redact($rows);
+        $redacted = Toon::decode($toonResult);
 
         $this->assertCount(2, $redacted);
-        $this->assertSame('1', $redacted[0]['id']);
+        $this->assertEquals(1, $redacted[0]['id']);
 
         // Email should be redacted
         $this->assertStringContainsString('[REDACTED_', $redacted[0]['text']);
@@ -82,7 +83,8 @@ class PIIAnalyzerServiceTest extends TestCase
             ['c' => $longText.' Contact: bob@example.com'], // Long with email PII
         ];
 
-        $redacted = self::$sharedAnalyzer->redact($rows);
+        $toonResult = self::$sharedAnalyzer->redact($rows);
+        $redacted = Toon::decode($toonResult);
 
         $this->assertCount(4, $redacted);
         $this->assertSame($shortText, $redacted[0]['c']); // No PII
@@ -117,23 +119,24 @@ class PIIAnalyzerServiceTest extends TestCase
             ],
         ];
 
-        $redacted = self::$sharedAnalyzer->redact($rows);
+        $toonResult = self::$sharedAnalyzer->redact($rows);
+        $redacted = Toon::decode($toonResult);
 
         $this->assertCount(2, $redacted);
 
         // Row 1
-        $this->assertSame('true', $redacted[0]['is_active']);
-        $this->assertSame('false', $redacted[0]['is_deleted']);
-        $this->assertSame('123', $redacted[0]['score']);
-        $this->assertSame('NULL', $redacted[0]['nullable']);
+        $this->assertTrue($redacted[0]['is_active']);
+        $this->assertFalse($redacted[0]['is_deleted']);
+        $this->assertSame(123, $redacted[0]['score']);
+        $this->assertNull($redacted[0]['nullable']);
         // Check redaction
         $this->assertStringContainsString('[REDACTED_', $redacted[0]['bio']);
         $this->assertStringNotContainsString('jane@example.com', $redacted[0]['bio']);
 
         // Row 2
-        $this->assertSame('false', $redacted[1]['is_active']);
-        $this->assertSame('true', $redacted[1]['is_deleted']);
-        $this->assertSame('456', $redacted[1]['score']);
+        $this->assertFalse($redacted[1]['is_active']);
+        $this->assertTrue($redacted[1]['is_deleted']);
+        $this->assertSame(456, $redacted[1]['score']);
         $this->assertSame('Just a bio', $redacted[1]['bio']);
         $this->assertSame('not null', $redacted[1]['nullable']);
     }
@@ -147,10 +150,11 @@ class PIIAnalyzerServiceTest extends TestCase
             ['val' => '   '],
         ];
 
-        $redacted = self::$sharedAnalyzer->redact($rows);
+        $toonResult = self::$sharedAnalyzer->redact($rows);
+        $redacted = Toon::decode($toonResult);
 
         $this->assertCount(3, $redacted);
-        $this->assertSame('NULL', $redacted[0]['val']);
+        $this->assertNull($redacted[0]['val']);
         $this->assertSame('', $redacted[1]['val']);
         $this->assertSame('   ', $redacted[2]['val']);
     }
@@ -167,7 +171,8 @@ class PIIAnalyzerServiceTest extends TestCase
 
         $rows = [['large' => $text]];
 
-        $redacted = self::$sharedAnalyzer->redact($rows);
+        $toonResult = self::$sharedAnalyzer->redact($rows);
+        $redacted = Toon::decode($toonResult);
 
         $this->assertCount(1, $redacted);
         $res = $redacted[0]['large'];

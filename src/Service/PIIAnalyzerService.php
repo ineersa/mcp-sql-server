@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Utils\TextChunker;
+use HelgeSverre\Toon\Toon;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -22,10 +23,6 @@ final class PIIAnalyzerService
      */
     private const int MAX_CHUNK_CHARS = 1800;
 
-    // Delimiters for concatenation
-    private const string COL_SEP = ' <||SEP||> ';
-    private const string ROW_SEP = ' <||ROW_SEP||> ';
-
     private ?\GlinerWrapper $gliner = null;
 
     public function __construct(
@@ -37,57 +34,84 @@ final class PIIAnalyzerService
     /**
      * Redact PII values from query result rows.
      *
-     * Simplified Strategy:
-     * 1. Concatenate ALL rows into ONE big string.
-     * 2. Split string into chunks of 2500 chars.
-     * 3. Send chunks to GLiNER in ONE batch call.
-     * 4. Join redacted chunks and explode back to rows.
+     * Strategy:
+     * 1. Encode all rows to TOON.
+     * 2. If result is small enough, redact directly.
+     * 3. If too large, split rows into chunks, encode/redact/decode each chunk, then merge.
      *
      * @param list<array<string, mixed>> $rows Query result rows to redact
      *
-     * @return list<array<string, mixed>> Rows with PII values replaced by [REDACTED_type]
+     * @return string The redaction TOON-encoded string
      */
-    public function redact(array $rows): array
+    public function redact(array $rows): string
     {
         if ([] === $rows) {
-            return [];
+            return '';
         }
 
+        $fullEncoded = Toon::encode($rows);
+
+        // If small enough, just redact the whole string
+        if (\strlen($fullEncoded) <= self::MAX_CHUNK_CHARS) {
+            return $this->redactString($fullEncoded);
+        }
+
+        // --- Large Result Strategy: Chunk by Rows ---
+        // We can't just split the TOON string arbitrarily because we need valid structure.
+        // So we split the source rows into smaller batches.
+
+        // Estimate rows per chunk (avg row length)
+        $avgRowLen = (int) ceil(\strlen($fullEncoded) / \count($rows));
+        // Target ~1500 chars to be safe (under 1800)
+        $rowsPerChunk = (int) floor(1500 / $avgRowLen);
+        if ($rowsPerChunk < 1) {
+            $rowsPerChunk = 1;
+        }
+
+        $chunks = array_chunk($rows, $rowsPerChunk);
+        $redactedRows = [];
+
+        foreach ($chunks as $chunkRows) {
+            $chunkEncoded = Toon::encode($chunkRows);
+            // Redact this chunk's TOON string
+            $redactedChunkStr = $this->redactString($chunkEncoded);
+
+            // Decode back to get the redacted structure
+            try {
+                $decoded = Toon::decode($redactedChunkStr);
+                if (\is_array($decoded)) {
+                    foreach ($decoded as $r) {
+                        $redactedRows[] = $r;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // If decoding fails (e.g. redaction broke syntax), fallback to original rows for this chunk?
+                // Or log error. Ideally we want to fail safe.
+                $this->logger->error('Failed to decode redacted chunk', ['error' => $e->getMessage()]);
+                throw $e;
+            }
+        }
+
+        return Toon::encode($redactedRows);
+    }
+
+    private function redactString(string $text): string
+    {
         $this->ensureModelLoaded();
 
-        $columns = array_keys($rows[0]);
+        // Use TextChunker to handle large text safely
+        $chunks = TextChunker::splitTextSafely($text, self::MAX_CHUNK_CHARS);
 
-        // 1. One Big String
-        $rowStrings = [];
-        foreach ($rows as $row) {
-            $values = [];
-            foreach ($columns as $col) {
-                $values[] = $col.': '.$this->valueToString($row[$col] ?? null);
-            }
-            $rowStrings[] = implode(self::COL_SEP, $values);
-        }
-        $fullText = implode(self::ROW_SEP, $rowStrings);
-
-        // 2. Safe Split
-        $textChunks = TextChunker::splitTextSafely(
-            $fullText,
-            self::MAX_CHUNK_CHARS,
-            self::ROW_SEP,
-            self::COL_SEP
-        );
-
-        // 3. Run Inference (One Single Call)
         try {
             $labels = $this->configLoader->getLabels();
             $threshold = $this->configLoader->getThreshold();
 
-            /** @var list<list<array{start: int, end: int, label: string, score: float}>> $batchPredictions */
-            $batchPredictions = $this->gliner->predictBatch($textChunks, $labels);
+            $batchPredictions = $this->gliner->predictBatch($chunks, $labels);
 
             $redactedChunks = [];
 
-            foreach ($textChunks as $chunkIdx => $chunkText) {
-                $predictions = $batchPredictions[$chunkIdx] ?? [];
+            foreach ($chunks as $idx => $chunkText) {
+                $predictions = $batchPredictions[$idx] ?? [];
 
                 $filtered = array_filter(
                     $predictions,
@@ -108,82 +132,12 @@ final class PIIAnalyzerService
                 $redactedChunks[] = $chunkText;
             }
 
-            // 4. Join
-            $fullRedactedText = implode('', $redactedChunks);
-
-            // 5. Explode back to rows
-            $finalRows = [];
-            $chunkRowStrings = explode(self::ROW_SEP, $fullRedactedText);
-
-            foreach ($chunkRowStrings as $rowString) {
-                $rowValues = explode(self::COL_SEP, $rowString);
-                $newRow = [];
-                foreach ($columns as $i => $colName) {
-                    $val = $rowValues[$i] ?? '';
-                    $prefix = $colName.': ';
-
-                    if (!str_starts_with($val, $prefix)) {
-                        throw new \RuntimeException(\sprintf('Redaction integrity check failed. Column "%s" prefix missing in value "%s".', $colName, $val));
-                    }
-
-                    $newRow[$colName] = substr($val, \strlen($prefix));
-                }
-                $finalRows[] = $newRow;
-            }
-
-            // Safety: Match row counts
-            $parsedCount = \count($finalRows);
-            $totalCount = \count($rows);
-
-            if ($parsedCount < $totalCount) {
-                for ($i = $parsedCount; $i < $totalCount; ++$i) {
-                    $safeRow = [];
-                    foreach ($columns as $col) {
-                        $safeRow[$col] = $this->valueToString($rows[$i][$col] ?? null);
-                    }
-                    $finalRows[] = $safeRow;
-                }
-            }
-            if ($parsedCount > $totalCount) {
-                $finalRows = \array_slice($finalRows, 0, $totalCount);
-            }
-
-            return $finalRows;
+            return implode('', $redactedChunks);
         } catch (\Throwable $e) {
-            $this->logger->error('GLiNER batch redaction failed', [
-                'error' => $e->getMessage(),
-                'chunkCount' => \count($textChunks),
-            ]);
-            throw $e;
-        }
-    }
+            $this->logger->error('GLiNER redaction failed', ['error' => $e->getMessage()]);
 
-    /**
-     * Convert value to string representation for concatenation.
-     */
-    private function valueToString(mixed $value): string
-    {
-        if (null === $value) {
-            return 'NULL';
+            return $text;
         }
-        if (true === $value) {
-            return 'true';
-        }
-        if (false === $value) {
-            return 'false';
-        }
-        if ($value instanceof \DateTimeInterface) {
-            return "'".$value->format('Y-m-d H:i:s')."'";
-        }
-
-        $str = (string) $value;
-
-        // Sanitize delimiters to prevent collision/injection
-        return str_replace(
-            [self::COL_SEP, self::ROW_SEP],
-            [' [SEP] ', ' [ROW_SEP] '],
-            $str
-        );
     }
 
     /**

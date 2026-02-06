@@ -290,7 +290,8 @@ You can fine-tune the detection threshold and entity types in your `databases.ya
 
 ```yaml
 pii:
-    threshold: 0.9 # Confidence threshold (0.0-1.0)
+    threshold: 0.6 # Confidence threshold (0.0-1.0)
+    # Note: Default is 0.6. For higher recall (especially on dates), you can lower this to e.g. 0.2.
 
     # Optional: Custom model paths (defaults to models/ in project root)
     # tokenizer_path: "models/tokenizer.json"
