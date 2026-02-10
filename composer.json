@@ -16,15 +16,16 @@
     "require": {
         "php": ">=8.4",
         "ext-ctype": "*",
-        "ext-iconv": "*",
         "ext-fileinfo": "*",
+        "ext-iconv": "*",
         "ext-pdo": "*",
         "ext-pdo_mysql": "*",
         "ext-pdo_pgsql": "*",
-        "ext-pdo_sqlsrv": "*",
         "ext-pdo_sqlite": "*",
+        "ext-pdo_sqlsrv": "*",
         "doctrine/dbal": "^4.4.1",
         "doctrine/doctrine-bundle": "^2.18.2",
+        "helgesverre/toon": "^3.1",
         "mcp/sdk": ">=0.3",
         "symfony/console": "7.4.*",
         "symfony/dotenv": "7.4.*",
@@ -35,9 +36,9 @@
         "symfony/yaml": "7.4.*"
     },
     "require-dev": {
-        "friendsofphp/php-cs-fixer": "^3.92.5",
+        "friendsofphp/php-cs-fixer": "^3.93.1",
         "phpstan/phpstan": "^1.12.32",
-        "phpunit/phpunit": "^12.5.6",
+        "phpunit/phpunit": "^12.5.9",
         "symfony/browser-kit": "7.4.*",
         "symfony/css-selector": "7.4.*",
         "symfony/maker-bundle": "1.x-dev",
@@ -88,22 +89,30 @@
         ],
         "cs-fix": "vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php",
         "phpstan": "vendor/bin/phpstan analyse -c phpstan.dist.neon",
-        "db-up": "docker compose -f docker-compose.test.yaml up -d --wait",
-        "db-down": "docker compose -f docker-compose.test.yaml down",
+        "docker-build": "docker build -t ineersa/database-mcp:latest .",
+        "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest .",
+        "docker-test-build": "docker compose -f docker-compose.test.yaml build php-test",
         "tests": [
-            "@db-up",
-            "vendor/bin/phpunit --colors=always --testdox"
+            "docker compose -f docker-compose.test.yaml up -d --wait --build",
+            "docker compose -f docker-compose.test.yaml exec php-test composer install",
+            "docker compose -f docker-compose.test.yaml exec php-test php bin/console database:fixtures:load",
+            "docker compose -f docker-compose.test.yaml exec php-test vendor/bin/phpunit --colors=always --testdox"
         ],
         "coverage": [
-            "@db-up",
-            "XDEBUG_MODE=coverage vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml"
+            "docker compose -f docker-compose.test.yaml up -d --wait --build",
+            "docker compose -f docker-compose.test.yaml exec php-test composer install",
+            "docker compose -f docker-compose.test.yaml exec php-test php bin/console database:fixtures:load",
+            "docker compose -f docker-compose.test.yaml exec -e XDEBUG_MODE=coverage php-test vendor/bin/phpunit --colors=always --testdox --coverage-text --coverage-html coverage/ --coverage-clover coverage/clover.xml"
         ],
-        "tests-xdebug": [
-            "@db-up",
-            "php -d xdebug.mode=debug -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 -d xdebug.start_with_request=yes vendor/bin/phpunit --colors=always --testdox"
+        "test": [
+            "docker compose -f docker-compose.test.yaml exec php-test vendor/bin/phpunit"
         ],
-        "docker-build": "docker build -t ineersa/database-mcp:latest .",
-        "docker-rebuild": "docker build --no-cache -t ineersa/database-mcp:latest ."
+        "fixtures-reload": [
+            "docker compose -f docker-compose.test.yaml exec php-test php bin/console database:fixtures:load"
+        ],
+        "console": [
+            "docker compose -f docker-compose.test.yaml exec php-test php bin/console"
+        ]
     },
     "conflict": {
         "symfony/symfony": "*"

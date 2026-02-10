@@ -16,9 +16,13 @@ final class DoctrineConfigLoaderTest extends TestCase
     private string $tempDir;
     private string $configFile;
     private LoggerInterface $logger;
+    private ?string $originalDatabaseConfigFile = null;
 
     protected function setUp(): void
     {
+        // Save original env value to restore later
+        $this->originalDatabaseConfigFile = $_ENV['DATABASE_CONFIG_FILE'] ?? null;
+
         $this->tempDir = sys_get_temp_dir().'/doctrine_config_test_'.uniqid();
         $filesystem = new Filesystem();
         $filesystem->mkdir($this->tempDir);
@@ -34,7 +38,12 @@ final class DoctrineConfigLoaderTest extends TestCase
             $filesystem->remove($this->tempDir);
         }
 
-        unset($_ENV['DATABASE_CONFIG_FILE']);
+        // Restore original env value
+        if (null !== $this->originalDatabaseConfigFile) {
+            $_ENV['DATABASE_CONFIG_FILE'] = $this->originalDatabaseConfigFile;
+        } else {
+            unset($_ENV['DATABASE_CONFIG_FILE']);
+        }
     }
 
     public function testLoadAndValidateThrowsExceptionWhenEnvVarNotSet(): void

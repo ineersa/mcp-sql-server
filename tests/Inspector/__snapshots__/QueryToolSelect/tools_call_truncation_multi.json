@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "[3]{id,customer_name,customer_email,phone,ssn,credit_card,ip_address,notes}:\n  1,John Smith,john.smith@example.com,(555) 123-4567,123-45-6789,\"4532015112830366\",192.168.1.100,<TEXT>\n  2,Jane Doe,jane.doe@company.org,+1-555-987-6543,987-65-4321,\"5425233430109903\",10.0.0.50,<TEXT>\n  3,Robert Johnson,rjohnson@email.net,555.456.7890,456-78-9012,\"374245455400126\",172.16.0.1,<TEXT>"
+    }
+  ],
+  "isError": false
+}

@@ -2,33 +2,8 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT TOP 10 * FROM users ORDER BY id\n```\n### Count\n3\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Judy | judy@example.com |\n| 2 | Karl | karl@example.com |\n| 3 | Laura | laura@example.com |\n\n"
+      "text": "[3]{id,name,email}:\n  \"1\",Judy,judy@example.com\n  \"2\",Karl,karl@example.com\n  \"3\",Laura,laura@example.com"
     }
   ],
-  "structuredContent": {
-    "results": [
-      {
-        "query": "SELECT TOP 10 * FROM users ORDER BY id",
-        "count": 3,
-        "rows": [
-          {
-            "id": "1",
-            "name": "Judy",
-            "email": "judy@example.com"
-          },
-          {
-            "id": "2",
-            "name": "Karl",
-            "email": "karl@example.com"
-          },
-          {
-            "id": "3",
-            "name": "Laura",
-            "email": "laura@example.com"
-          }
-        ]
-      }
-    ]
-  },
   "isError": false
 }

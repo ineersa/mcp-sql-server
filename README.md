@@ -14,6 +14,9 @@ A PHP/Symfony [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) s
     - [Database Configuration File](#database-configuration-file)
 - [MCP Client Setup](#mcp-client-setup)
 - [Available Tools](#available-tools)
+- [PII Detection & Redaction](#pii-detection--redaction)
+    - [Enabling PII Protection](#enabling-pii-protection)
+    - [Model Setup](#model-setup)
 - [Security](#security)
 - [Development](#development)
 - [License](#license)
@@ -87,7 +90,7 @@ doctrine:
                 driver: "pdo_sqlite"
                 path: "var/test.sqlite"
 
-            # MySQL with URL/DSN format
+            # MySQL with URL/DSN format and PII redaction enabled
             products:
                 url: "mysql://user:password@127.0.0.1:3306/mydb?serverVersion=8.0&charset=utf8mb4"
 
@@ -243,6 +246,167 @@ Executes read-only SQL queries against a specified database connection.
 
 ---
 
+## PII Detection & Redaction
+
+This server includes built-in PII (Personally Identifiable Information) detection and redaction using GLiNER models in ONNX format via the native [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension.
+
+### 1. Download Models
+
+The server supports any GLiNER model in ONNX format. While any compatible model can be used, we recommend and provide a helper for our tested [GLiNER PII ONNX](https://huggingface.co/ineersa/gliner-PII-onnx) model (~1.8GB).
+
+**Using Docker (Recommended):**
+
+```bash
+docker compose run --rm download-models
+```
+
+**Using PHP:**
+
+```bash
+php bin/console download-models
+```
+
+This downloads `model.onnx` and `tokenizer.json` to your local `./models` directory.
+
+### 2. Enable on Specific Connections
+
+PII redaction is configured per-connection in your `databases.yaml`. When enabled, query results are automatically scanned and sensitive data is replaced with `[REDACTED_type]` markers (e.g., `[REDACTED_email]`, `[REDACTED_ssn]`).
+
+```yaml
+doctrine:
+    dbal:
+        connections:
+            production:
+                url: "mysql://..."
+                pii_enabled: true # Redact PII in query results
+            development:
+                url: "mysql://..."
+                # pii_enabled defaults to false
+```
+
+### 3. Optionally Customize PII Settings
+
+You can fine-tune the detection threshold and entity types in your `databases.yaml`:
+
+```yaml
+pii:
+    threshold: 0.6 # Confidence threshold (0.0-1.0)
+    # Note: Default is 0.6. For higher recall (especially on dates), you can lower this to e.g. 0.2.
+
+    # Optional: Custom model paths (defaults to models/ in project root)
+    # tokenizer_path: "models/tokenizer.json"
+    # model_path: "models/model.onnx"
+
+    # Optional: Limit detection to specific entity types for better performance
+    labels:
+        - email
+        - phone_number
+        - credit_debit_card
+        - ssn
+```
+
+<details>
+<summary>View all 64 supported PII labels</summary>
+
+```yaml
+labels:
+    # Personal
+    # - first_name
+    # - last_name
+    # - name
+    # - date_of_birth
+    # - age
+    # - gender
+    # - sexuality
+    # - race_ethnicity
+    # - religious_belief
+    # - political_view
+    # - occupation
+    # - employment_status
+    # - education_level
+
+    # Contact
+    - email
+    - phone_number
+    # - street_address
+    # - city
+    # - county
+    # - state
+    # - country
+    # - coordinate
+    # - zip_code
+    # - po_box
+
+    # Financial
+    - credit_debit_card
+    # - cvv
+    # - bank_routing_number
+    # - account_number
+    # - iban
+    # - swift_bic
+    # - pin
+    - ssn
+    # - tax_id
+    # - ein
+
+    # Government
+    # - passport_number
+    # - driver_license
+    # - license_plate
+    # - national_id
+    # - voter_id
+
+    # Digital/Technical
+    # - ipv4
+    # - ipv6
+    # - mac_address
+    # - url
+    # - user_name
+    # - password
+    # - device_identifier
+    # - imei
+    # - serial_number
+    # - api_key
+    # - secret_key
+
+    # Healthcare/PHI
+    # - medical_record_number
+    # - health_plan_beneficiary_number
+    # - blood_type
+    # - biometric_identifier
+    # - health_condition
+    # - medication
+    # - insurance_policy_number
+
+    # Temporal
+    # - date
+    # - time
+    # - date_time
+
+    # Organization
+    # - company_name
+    # - employee_id
+    # - customer_id
+    # - certificate_license_number
+    # - vehicle_identifier
+```
+
+</details>
+
+**Manual Extension Installation (non-Docker):**
+
+Install the [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension:
+
+```bash
+curl -fsSL -o gliner.tar.gz \
+    https://github.com/ineersa/gliner-rs-php/releases/download/0.0.6/gliner-rs-php-0.0.6-linux-x86_64.tar.gz
+tar -xzf gliner.tar.gz
+cp libgliner_rs_php.so /usr/local/lib/php/extensions/
+echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner.ini
+```
+
+---
+
 ## Security
 
 ### Read-Only Enforcement
@@ -301,9 +465,11 @@ composer docker-rebuild   # Rebuild without cache
 ```
 src/
 ├── Command/        # Symfony console commands
+├── Enum/           # PII entity types and groups
 ├── ReadOnly/       # DBAL middleware for read-only enforcement
-├── Service/        # Core services
+├── Service/        # Core services (including PIIAnalyzerService)
 └── Tools/          # MCP tool implementations
+stubs/              # PHP extension stubs for IDE support
 tests/              # PHPUnit test suites
 config/             # Symfony configuration
 ```

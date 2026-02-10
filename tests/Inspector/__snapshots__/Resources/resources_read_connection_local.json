@@ -3,7 +3,7 @@
     {
       "uri": "db://local",
       "mimeType": "text/plain",
-      "text": "products\nusers"
+      "text": "[3]: pii_samples,products,users"
     }
   ]
 }

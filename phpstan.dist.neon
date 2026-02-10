@@ -3,6 +3,8 @@ parameters:
     paths:
         - src/
         - tests/
+    scanFiles:
+        - stubs/GlinerWrapper.php
     tmpDir: var/phpstan
     excludePaths:
         - tests/bootstrap.php

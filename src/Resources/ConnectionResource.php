@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Resources;
 
 use App\Service\DoctrineConfigLoader;
+use HelgeSverre\Toon\Toon;
 
 final class ConnectionResource
 {
@@ -21,6 +22,6 @@ final class ConnectionResource
     {
         $tables = $this->doctrineConfigLoader->getTableNames($connection);
 
-        return implode("\n", $tables);
+        return Toon::encode($tables);
     }
 }

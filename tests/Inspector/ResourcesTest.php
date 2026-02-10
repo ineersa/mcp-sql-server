@@ -101,6 +101,7 @@ final class ResourcesTest extends InspectorSnapshotTestCase
         $_ENV['DATABASE_CONFIG_FILE'] = \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2));
 
         $logger = new \Psr\Log\NullLogger();
+        $modelDownloader = new \App\Service\ModelDownloaderService($logger);
         $loader = new \App\Service\DoctrineConfigLoader($logger);
         $loader->loadAndValidate();
 

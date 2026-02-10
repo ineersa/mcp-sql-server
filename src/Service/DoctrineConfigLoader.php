@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Enum\PIILabel;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
@@ -14,8 +15,17 @@ use Symfony\Component\Yaml\Yaml;
 
 final class DoctrineConfigLoader
 {
-    /** @var array<string, array{name: string, type: string, version: ?string, connection: Connection}> */
+    private const string DEFAULT_TOKENIZER_PATH = 'models/tokenizer.json';
+    private const string DEFAULT_MODEL_PATH = 'models/model.onnx';
+
+    /** @var array<string, array{name: string, type: string, version: ?string, pii_enabled: bool, connection: Connection}> */
     private array $connections = [];
+
+    private ?string $tokenizerPath = null;
+    private ?string $modelPath = null;
+    private ?float $threshold = null;
+    /** @var list<string>|null */
+    private ?array $labels = null;
 
     public function __construct(
         private LoggerInterface $logger,
@@ -35,6 +45,7 @@ final class DoctrineConfigLoader
         $this->validateConfigStructure($config);
 
         $this->loadConnections($config);
+        $this->loadPiiConfig($config);
     }
 
     /** @return array<string> */
@@ -73,6 +84,37 @@ final class DoctrineConfigLoader
         return $this->connections[$name]['version'] ?? null;
     }
 
+    public function isPiiEnabled(string $name): bool
+    {
+        return $this->connections[$name]['pii_enabled'] ?? false;
+    }
+
+    public function hasAnyPiiEnabled(): bool
+    {
+        foreach ($this->connections as $data) {
+            if ($data['pii_enabled']) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasPiiConfig(): bool
+    {
+        return null !== $this->tokenizerPath && null !== $this->modelPath;
+    }
+
+    public function getTokenizerPath(): ?string
+    {
+        return $this->tokenizerPath;
+    }
+
+    public function getModelPath(): ?string
+    {
+        return $this->modelPath;
+    }
+
     /** @return string[] */
     public function getTableNames(string $connectionName): array
     {
@@ -97,6 +139,22 @@ final class DoctrineConfigLoader
         $createTableSql = $platform->getCreateTableSQL($table);
 
         return implode(";\n", $createTableSql).';';
+    }
+
+    public function getThreshold(): float
+    {
+        return $this->threshold ?? 0.6;
+    }
+
+    /** @return list<string> */
+    public function getLabels(): array
+    {
+        return $this->labels ?? PIILabel::getAllValues();
+    }
+
+    public function setThreshold(float $threshold): void
+    {
+        $this->threshold = $threshold;
     }
 
     private function getConfigFilePath(): string
@@ -177,12 +235,69 @@ final class DoctrineConfigLoader
         }
     }
 
+    /** @param mixed[] $config */
+    private function loadPiiConfig(array $config): void
+    {
+        $piiConfig = $config['pii'] ?? [];
+        if (!\is_array($piiConfig)) {
+            throw new \RuntimeException('"pii" config section must be an array.');
+        }
+
+        if (isset($piiConfig['tokenizer_path']) && \is_string($piiConfig['tokenizer_path'])) {
+            $this->tokenizerPath = $this->resolveRelativePath($piiConfig['tokenizer_path']);
+        }
+
+        if (isset($piiConfig['model_path']) && \is_string($piiConfig['model_path'])) {
+            $this->modelPath = $this->resolveRelativePath($piiConfig['model_path']);
+        }
+
+        if (isset($piiConfig['threshold']) && is_numeric($piiConfig['threshold'])) {
+            $this->threshold = (float) $piiConfig['threshold'];
+        }
+
+        if (isset($piiConfig['labels']) && \is_array($piiConfig['labels'])) {
+            $this->labels = array_values(array_filter(
+                $piiConfig['labels'],
+                static fn ($v): bool => \is_string($v)
+            ));
+        }
+
+        // Set default paths if PII is enabled but paths not configured
+        if ($this->hasAnyPiiEnabled() && !$this->hasPiiConfig()) {
+            $this->tokenizerPath = $this->resolveRelativePath(self::DEFAULT_TOKENIZER_PATH);
+            $this->modelPath = $this->resolveRelativePath(self::DEFAULT_MODEL_PATH);
+            $this->logger->info('Using default model paths for PII detection', [
+                'tokenizer' => $this->tokenizerPath,
+                'model' => $this->modelPath,
+            ]);
+        }
+
+        // Check if models exist if PII is enabled
+        if ($this->hasAnyPiiEnabled() && $this->hasPiiConfig()) {
+            if (!file_exists($this->tokenizerPath) || !file_exists($this->modelPath)) {
+                throw new \RuntimeException(\sprintf('PII detection is enabled but model files are missing. Please run "bin/console download-models" (or "composer console -- download-models" if using Docker) to download them to "%s" and "%s".', $this->tokenizerPath, $this->modelPath));
+            }
+        }
+    }
+
+    private function resolveRelativePath(string $path): string
+    {
+        if (str_starts_with($path, '/')) {
+            return $path;
+        }
+
+        $projectRoot = \dirname(__DIR__, 2);
+
+        return $projectRoot.'/'.$path;
+    }
+
     /** @param mixed[] $connectionConfig */
     private function loadConnection(string $name, array $connectionConfig): void
     {
         $params = $this->extractConnectionParams($connectionConfig);
         $type = $this->extractDatabaseType($params);
         $version = $params['serverVersion'] ?? null;
+        $piiEnabled = isset($connectionConfig['pii_enabled']) && true === $connectionConfig['pii_enabled'];
 
         // Add read-only middleware for all connections
         $params['middlewares'] = [new \App\ReadOnly\ReadOnlyMiddleware()];
@@ -194,14 +309,16 @@ final class DoctrineConfigLoader
                 'name' => $name,
                 'type' => $type,
                 'version' => \is_string($version) ? $version : null,
+                'pii_enabled' => $piiEnabled,
                 'connection' => $connection,
             ];
 
             $this->logger->info(\sprintf(
-                'Successfully connected to database "%s" (type: %s, version: %s)',
+                'Successfully connected to database "%s" (type: %s, version: %s, pii: %s)',
                 $name,
                 $type,
-                $version ?? 'unknown'
+                $version ?? 'unknown',
+                $piiEnabled ? 'enabled' : 'disabled'
             ));
         } catch (Exception $e) {
             throw new \RuntimeException(\sprintf('Failed to create connection "%s": %s', $name, $e->getMessage()), previous: $e);
