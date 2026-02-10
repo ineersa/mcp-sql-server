@@ -2,21 +2,8 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT 'It''s a test' LIMIT 1\n```\n### Count\n1\n\n### Rows\n| 'It''s a test' |\n| --- |\n| It's a test |\n\n"
+      "text": "[1]{\"'It''s a test'\"}:\n  It's a test"
     }
   ],
-  "structuredContent": {
-    "results": [
-      {
-        "query": "SELECT 'It''s a test' LIMIT 1",
-        "count": 1,
-        "rows": [
-          {
-            "'It''s a test'": "It's a test"
-          }
-        ]
-      }
-    ]
-  },
   "isError": false
 }

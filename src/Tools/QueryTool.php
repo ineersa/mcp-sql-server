@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Tools;
 
 use App\Service\DoctrineConfigLoader;
+use App\Service\PIIAnalyzerService;
 use App\Service\SafeQueryExecutor;
+use HelgeSverre\Toon\Toon;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
 use Psr\Log\LoggerInterface;
@@ -27,6 +29,7 @@ RULES:
 1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.
 2. Check the connection type before writing the query - use correct syntax for that database.
 3. For more rows, use pagination with OFFSET.
+4. Large text columns (>200 chars) are truncated to "<TEXT>" in multi-row results. To view full text, Query MUST return exactly 1 row.
 
 Examples:
   MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;
@@ -38,6 +41,7 @@ DESCRIPTION;
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,
         private SafeQueryExecutor $safeQueryExecutor,
+        private PIIAnalyzerService $piiAnalyzerService,
         private LoggerInterface $logger,
     ) {
     }
@@ -51,31 +55,31 @@ DESCRIPTION;
         string $query,
     ): CallToolResult {
         $queries = $this->splitSql($query);
-        $results = [];
+        $rows = [];
+        $result = '';
 
         try {
             $conn = $this->doctrineConfigLoader->getConnection($connection);
+            $piiEnabled = $this->doctrineConfigLoader->isPiiEnabled($connection);
 
             foreach ($queries as $singleQuery) {
                 $this->validateQuery($singleQuery);
                 $rows = $this->safeQueryExecutor->execute($conn, $singleQuery);
-                $count = \count($rows);
 
-                $results[] = [
-                    'query' => $singleQuery,
-                    'count' => $count,
-                    'rows' => $rows,
-                ];
+                $rows = $this->truncateLongTextRows($rows);
+
+                if ($piiEnabled && [] !== $rows) {
+                    $result = $this->piiAnalyzerService->redact($rows);
+                } else {
+                    $result = Toon::encode($rows);
+                }
             }
-
-            $markdown = $this->formatResultsToMarkdown($results);
 
             return new CallToolResult(
                 content: [
-                    new TextContent($markdown),
+                    new TextContent($result),
                 ],
                 isError: false,
-                structuredContent: ['results' => $results],
             );
         } catch (\Throwable $e) {
             $this->logger->error('Query execution failed', [
@@ -129,11 +133,16 @@ DESCRIPTION;
                 }
             }
 
+            $piiGuard = $doctrineConfigLoader->isPiiEnabled($connectionName)
+                ? ' [PII GUARDED - sensitive data will be redacted]'
+                : '';
+
             $description .= \sprintf(
-                "\n - %s : %s, version %s",
+                "\n - %s : %s, version %s%s",
                 $connectionName,
                 $platform,
-                $version
+                $version,
+                $piiGuard
             );
         }
 
@@ -237,65 +246,42 @@ DESCRIPTION;
         return $queries;
     }
 
-    /** @param array<int, array<string, mixed>> $results */
-    private function formatResultsToMarkdown(array $results): string
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function truncateLongTextRows(array $rows): array
     {
-        $markdown = '';
-
-        foreach ($results as $index => $result) {
-            $markdown .= '## Query '.($index + 1)."\n";
-            $markdown .= "```sql\n".$result['query']."\n```\n";
-
-            if (isset($result['error'])) {
-                $markdown .= '**Error:** '.$result['error']."\n\n";
-                continue;
-            }
-
-            $markdown .= "### Count\n".$result['count']."\n\n";
-
-            if (empty($result['rows'])) {
-                $markdown .= "No results.\n\n";
-                continue;
-            }
-
-            $markdown .= "### Rows\n";
-            $markdown .= $this->arrayToMarkdownTable($result['rows']);
-            $markdown .= "\n";
+        if (\count($rows) <= 1) {
+            return $rows;
         }
 
-        return $markdown;
-    }
+        $longColumns = [];
 
-    /** @param array<int, array<string, mixed>> $rows */
-    private function arrayToMarkdownTable(array $rows): string
-    {
-        if (empty($rows)) {
-            return '';
-        }
-
-        $headers = array_keys($rows[0]);
-
-        $table = '| '.implode(' | ', $headers)." |\n";
-
-        $table .= '| '.implode(' | ', array_map(fn () => '---', $headers))." |\n";
-
+        // First pass: identify columns that have long text
         foreach ($rows as $row) {
-            $table .= '| '.implode(' | ', array_map(function ($val) {
-                if (null === $val) {
-                    return 'NULL';
+            foreach ($row as $key => $value) {
+                if (\is_string($value) && \strlen($value) > 200) {
+                    $longColumns[$key] = true;
                 }
-                if (\is_bool($val)) {
-                    return $val ? 'true' : 'false';
-                }
-                if (\is_array($val) || \is_object($val)) {
-                    return json_encode($val);
-                }
-
-                return str_replace('|', "\|", (string) $val);
-            }, $row))." |\n";
+            }
         }
 
-        return $table;
+        if ([] === $longColumns) {
+            return $rows;
+        }
+
+        // Second pass: redact those columns
+        foreach ($rows as &$row) {
+            foreach ($longColumns as $key => $_) {
+                if (isset($row[$key])) {
+                    $row[$key] = '<TEXT>';
+                }
+            }
+        }
+
+        return $rows;
     }
 
     private function validateQuery(string $query): void

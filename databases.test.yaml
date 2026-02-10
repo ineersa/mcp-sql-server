@@ -5,16 +5,25 @@ doctrine:
                 driver: "pdo_sqlite"
                 path: "var/test.sqlite"
             products:
-                url: "mysql://test_user:test_password@127.0.0.1:13306/mcp_test?serverVersion=8.0&charset=utf8mb4"
+                url: "mysql://test_user:test_password@mysql:3306/mcp_test?serverVersion=8.0&charset=utf8mb4"
+                pii_enabled: true
             users:
-                url: "%env(POSTGRES_DSN)%"
+                url: "postgresql://test_user:test_password@postgres:5432/mcp_test"
             server:
                 driver: "pdo_sqlsrv"
-                host: "127.0.0.1"
-                port: 11433
+                host: "sqlserver"
+                port: 1433
                 dbname: "mcp_test"
                 user: "sa"
                 password: "Test@Password123"
                 serverVersion: "2019"
                 driverOptions:
                     TrustServerCertificate: "yes"
+
+pii:
+    tokenizer_path: "models/tokenizer.json"
+    model_path: "models/model.onnx"
+    threshold: 0.6
+    labels:
+        - email
+        - city

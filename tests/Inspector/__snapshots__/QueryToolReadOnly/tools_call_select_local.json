@@ -2,23 +2,8 @@
   "content": [
     {
       "type": "text",
-      "text": "## Query 1\n```sql\nSELECT * FROM users LIMIT 1\n```\n### Count\n1\n\n### Rows\n| id | name | email |\n| --- | --- | --- |\n| 1 | Alice | alice@example.com |\n\n"
+      "text": "[1]{id,name,email}:\n  1,Alice,alice@example.com"
     }
   ],
-  "structuredContent": {
-    "results": [
-      {
-        "query": "SELECT * FROM users LIMIT 1",
-        "count": 1,
-        "rows": [
-          {
-            "id": 1,
-            "name": "Alice",
-            "email": "alice@example.com"
-          }
-        ]
-      }
-    ]
-  },
   "isError": false
 }

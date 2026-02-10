@@ -1,12 +1,10 @@
-# Database MCP Server - Production Dockerfile
-# Supports: MySQL, PostgreSQL, SQLite, SQL Server
-# Includes GLiNER PHP extension for PII detection
+# Test/Development Dockerfile with PHP for PII analysis
+# Includes all database drivers, dev dependencies, and GLiNER PHP extension
 
 FROM php:8.4-cli-bookworm
 
 LABEL maintainer="Illia Vasylevskyi <ineersa@gmail.com>"
-LABEL description="MCP server implementation to work with SQL databases"
-LABEL version="0.0.2"
+LABEL description="Test environment for MCP Database Server with PII detection"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     # Required for SQLite
     libsqlite3-dev \
+    # Node.js for MCP Inspector tests
+    nodejs \
+    npm \
     # Cleanup apt cache in same layer
     && rm -rf /var/lib/apt/lists/*
 
@@ -31,8 +32,7 @@ RUN docker-php-ext-install \
     pdo \
     pdo_mysql \
     pdo_pgsql \
-    pdo_sqlite \
-    opcache
+    pdo_sqlite
 
 # Install SQL Server ODBC drivers and PHP extension
 RUN set -eux; \
@@ -66,17 +66,8 @@ RUN set -eux; \
     && echo "extension=/usr/local/lib/php/extensions/libgliner_rs_php.so" > /usr/local/etc/php/conf.d/gliner_rs_php.ini \
     && rm -rf /tmp/gliner /tmp/gliner.tar.gz
 
-# Configure OPcache for production
-RUN { \
-    echo 'opcache.memory_consumption=128'; \
-    echo 'opcache.interned_strings_buffer=8'; \
-    echo 'opcache.max_accelerated_files=10000'; \
-    echo 'opcache.validate_timestamps=0'; \
-    echo 'opcache.enable_cli=1'; \
-} > /usr/local/etc/php/conf.d/opcache-recommended.ini
-
-# Set PHP production settings
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+# Set PHP development settings
+RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -84,27 +75,8 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /app
 
-# Copy composer files first for better layer caching
-COPY composer.json composer.lock symfony.lock ./
+# Environment for testing
+ENV APP_ENV=test
 
-# Set production environment BEFORE running composer scripts
-# This ensures cache:clear knows not to load dev bundles like MakerBundle
-ENV APP_ENV=prod
-
-# Install dependencies without dev packages
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
-
-# Copy application source (uses .dockerignore to exclude unwanted files)
-COPY . ./
-
-# Generate optimized autoloader
-RUN composer dump-autoload --optimize --classmap-authoritative
-
-# Note: For PII detection, mount GLiNER models via docker-compose volume:
-# - ./models:/app/models:ro
-
-# Create log directory
-RUN mkdir -p /tmp/database-mcp/log
-
-# The entrypoint is the MCP server
-ENTRYPOINT ["php", "/app/bin/database-mcp"]
+# Keep container running for exec commands
+ENTRYPOINT ["tail", "-f", "/dev/null"]
