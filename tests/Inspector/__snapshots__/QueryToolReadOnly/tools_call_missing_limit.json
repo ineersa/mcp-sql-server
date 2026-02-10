@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "error: SELECT query without WHERE clause must include LIMIT or TOP.\nhint: \"Add LIMIT 10 (MySQL/PostgreSQL/SQLite) or TOP 10 (SQL Server), or add a WHERE clause.\"\nretryable: false"
+    }
+  ],
+  "isError": true
+}

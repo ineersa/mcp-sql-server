@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "Error: Security violation: Keyword \"DELETE\" is not allowed in read-only mode."
+      "text": "error: \"Security violation: Keyword \\\"DELETE\\\" is not allowed in read-only mode.\"\nhint: Use a read-only SELECT query. Writes (INSERT/UPDATE/DELETE/DDL/transaction commands) are blocked.\nretryable: false"
     }
   ],
   "isError": true

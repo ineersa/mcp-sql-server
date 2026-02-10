@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Enum\PIILabel;
+use App\Exception\ToolUsageError;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception;
@@ -57,7 +58,7 @@ final class DoctrineConfigLoader
     public function getConnection(string $name): Connection
     {
         if (!isset($this->connections[$name])) {
-            throw new \InvalidArgumentException(\sprintf('Connection "%s" is not configured.', $name));
+            throw new ToolUsageError(message: \sprintf('Connection "%s" is not configured.', $name), hint: 'Use one of the names listed in tools/list under available database connections.', retryable: false);
         }
 
         return $this->connections[$name]['connection'];
@@ -132,7 +133,7 @@ final class DoctrineConfigLoader
 
         $tables = $schemaManager->listTableNames();
         if (!\in_array($tableName, $tables, true)) {
-            throw new \InvalidArgumentException(\sprintf('Table "%s" does not exist in connection "%s".', $tableName, $connectionName));
+            throw new ToolUsageError(message: \sprintf('Table "%s" does not exist in connection "%s".', $tableName, $connectionName), hint: 'Read the connection resource first to list tables, then use an existing table name.', retryable: false);
         }
 
         $table = $schemaManager->introspectTable($tableName);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Exception\ToolUsageError;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception;
 
@@ -67,7 +68,7 @@ final class SafeQueryExecutor
         foreach (self::FORBIDDEN_KEYWORDS as $keyword) {
             // Match whole words only using word boundaries (\b)
             if (preg_match('/\b'.$keyword.'\b/i', $sql)) {
-                throw new \RuntimeException(\sprintf('Security violation: Keyword "%s" is not allowed in read-only mode.', $keyword));
+                throw new ToolUsageError(message: \sprintf('Security violation: Keyword "%s" is not allowed in read-only mode.', $keyword), hint: 'Use a read-only SELECT query. Writes (INSERT/UPDATE/DELETE/DDL/transaction commands) are blocked.', retryable: false);
             }
         }
     }

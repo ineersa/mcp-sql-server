@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "error: \"Connection \\\"nonexistent\\\" is not configured.\"\nhint: Use one of the names listed in tools/list under available database connections.\nretryable: false"
+    }
+  ],
+  "isError": true
+}

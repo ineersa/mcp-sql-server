@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tools;
 
+use App\Exception\ToolUsageError;
 use App\Service\DoctrineConfigLoader;
 use App\Service\PIIAnalyzerService;
 use App\Service\SafeQueryExecutor;
+use Doctrine\DBAL\Exception as DbalException;
 use HelgeSverre\Toon\Toon;
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
@@ -89,12 +91,7 @@ DESCRIPTION;
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return new CallToolResult(
-                content: [
-                    new TextContent(\sprintf('Error: %s', $e->getMessage())),
-                ],
-                isError: true,
-            );
+            return $this->buildErrorResult($e);
         }
     }
 
@@ -310,7 +307,7 @@ DESCRIPTION;
             return;
         }
 
-        throw new \InvalidArgumentException('SELECT query without WHERE clause must include LIMIT or TOP.');
+        throw new ToolUsageError(message: 'SELECT query without WHERE clause must include LIMIT or TOP.', hint: 'Add LIMIT 10 (MySQL/PostgreSQL/SQLite) or TOP 10 (SQL Server), or add a WHERE clause.', retryable: false);
     }
 
     /**
@@ -364,5 +361,53 @@ DESCRIPTION;
         // Simple heuristic: if SELECT part contains aggregate and no plain column refs
         // This is a basic check - a full SQL parser would be more accurate
         return $hasAggregate;
+    }
+
+    private function buildErrorResult(\Throwable $error): CallToolResult
+    {
+        $toolError = $this->mapThrowableToToolUsageError($error);
+
+        return new CallToolResult(
+            content: [
+                new TextContent(Toon::encode([
+                    'error' => $toolError->getMessage(),
+                    'hint' => $toolError->getHint(),
+                    'retryable' => $toolError->isRetryable(),
+                ])),
+            ],
+            isError: true,
+        );
+    }
+
+    private function mapThrowableToToolUsageError(\Throwable $error): ToolUsageError
+    {
+        if ($error instanceof ToolUsageError) {
+            return $error;
+        }
+
+        if ($error instanceof DbalException) {
+            return new ToolUsageError(
+                message: $error->getMessage(),
+                hint: 'Query failed in the database. Verify table/column names and SQL syntax, then retry.',
+                retryable: true,
+                previous: $error,
+            );
+        }
+
+        if ($error instanceof \InvalidArgumentException) {
+            return new ToolUsageError(
+                message: $error->getMessage(),
+                hint: 'Check tool arguments and use values from tools/list (for connections) and resources/list (for tables).',
+                retryable: false,
+                previous: $error,
+            );
+        }
+
+        return new ToolUsageError(
+            message: $error->getMessage(),
+            hint: 'Temporary internal failure. Retry the same call once; if it still fails, adjust the query or inspect server logs.',
+            retryable: true,
+            previous: $error,
+        );
     }
 }

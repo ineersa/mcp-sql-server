@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "Error: An exception occurred while executing a query: SQLSTATE[HY000]: General error: 1 no such table: non_existent_table"
+      "text": "error: \"An exception occurred while executing a query: SQLSTATE[HY000]: General error: 1 no such table: non_existent_table\"\nhint: \"Query failed in the database. Verify table/column names and SQL syntax, then retry.\"\nretryable: true"
     }
   ],
   "isError": true
