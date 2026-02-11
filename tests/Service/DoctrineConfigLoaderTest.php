@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Exception\ToolUsageError;
 use App\Service\DoctrineConfigLoader;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -153,7 +154,7 @@ YAML);
     {
         $loader = new DoctrineConfigLoader($this->logger);
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(ToolUsageError::class);
         $this->expectExceptionMessage('Connection "nonexistent" is not configured');
 
         $loader->getConnection('nonexistent');

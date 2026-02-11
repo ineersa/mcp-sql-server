@@ -103,6 +103,36 @@ final class QueryToolReadOnlyTest extends InspectorSnapshotTestCase
             'testName' => 'drop_blocked',
         ];
 
+        $tests['Missing LIMIT Validation - local'] = [
+            'method' => 'tools/call',
+            'options' => [
+                'toolName' => 'query',
+                'toolArgs' => [
+                    'connection' => 'local',
+                    'query' => 'SELECT * FROM users',
+                ],
+                'envVars' => [
+                    'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                ],
+            ],
+            'testName' => 'missing_limit',
+        ];
+
+        $tests['Unknown Connection Validation'] = [
+            'method' => 'tools/call',
+            'options' => [
+                'toolName' => 'query',
+                'toolArgs' => [
+                    'connection' => 'nonexistent',
+                    'query' => 'SELECT * FROM users LIMIT 10',
+                ],
+                'envVars' => [
+                    'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                ],
+            ],
+            'testName' => 'unknown_connection',
+        ];
+
         return $tests;
     }
 

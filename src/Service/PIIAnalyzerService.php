@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Exception\ToolUsageError;
 use App\Utils\TextChunker;
 use HelgeSverre\Toon\Toon;
 use Psr\Log\LoggerInterface;
@@ -85,10 +86,8 @@ final class PIIAnalyzerService
                     }
                 }
             } catch (\Throwable $e) {
-                // If decoding fails (e.g. redaction broke syntax), fallback to original rows for this chunk?
-                // Or log error. Ideally we want to fail safe.
                 $this->logger->error('Failed to decode redacted chunk', ['error' => $e->getMessage()]);
-                throw $e;
+                throw new ToolUsageError(message: 'Failed to process redacted query result chunk.', hint: 'Temporary redaction failure. Retry the same query once.', retryable: true, previous: $e);
             }
         }
 
@@ -143,7 +142,7 @@ final class PIIAnalyzerService
     /**
      * Ensure the GLiNER model is loaded.
      *
-     * @throws \RuntimeException if model loading fails
+     * @throws ToolUsageError if model loading fails
      */
     private function ensureModelLoaded(): void
     {
@@ -152,22 +151,22 @@ final class PIIAnalyzerService
         }
 
         if (!class_exists(\GlinerWrapper::class)) {
-            throw new \RuntimeException('GLiNER PHP extension not installed. Install from: https://github.com/ineersa/gliner-rs-php');
+            throw new ToolUsageError(message: 'GLiNER PHP extension is not installed.', hint: 'Install https://github.com/ineersa/gliner-rs-php and restart the MCP server.', retryable: false);
         }
 
         $tokenizerPath = $this->configLoader->getTokenizerPath();
         $modelPath = $this->configLoader->getModelPath();
 
         if (null === $tokenizerPath || null === $modelPath) {
-            throw new \RuntimeException('PII config not set. Add pii.tokenizer_path and pii.model_path to your database config.');
+            throw new ToolUsageError(message: 'PII config is missing tokenizer/model paths.', hint: 'Set pii.tokenizer_path and pii.model_path in database config and restart the MCP server.', retryable: false);
         }
 
         if (!file_exists($tokenizerPath)) {
-            throw new \RuntimeException(\sprintf('Tokenizer file not found: %s', $tokenizerPath));
+            throw new ToolUsageError(message: \sprintf('Tokenizer file not found: %s', $tokenizerPath), hint: 'Run "bin/console download-models" to download GLiNER files and restart the MCP server.', retryable: false);
         }
 
         if (!file_exists($modelPath)) {
-            throw new \RuntimeException(\sprintf('Model file not found: %s', $modelPath));
+            throw new ToolUsageError(message: \sprintf('Model file not found: %s', $modelPath), hint: 'Run "bin/console download-models" to download GLiNER files.', retryable: false);
         }
 
         $this->logger->info('Loading GLiNER model...', [
@@ -179,7 +178,7 @@ final class PIIAnalyzerService
             $this->gliner = new \GlinerWrapper($tokenizerPath, $modelPath);
             $this->logger->info('GLiNER PII analyzer ready');
         } catch (\Throwable $e) {
-            throw new \RuntimeException('Failed to load GLiNER model: '.$e->getMessage(), previous: $e);
+            throw new ToolUsageError(message: 'Failed to load GLiNER model: '.$e->getMessage(), hint: 'Model initialization failed. Do not retry until model files/config are fixed.', retryable: false, previous: $e);
         }
     }
 }
