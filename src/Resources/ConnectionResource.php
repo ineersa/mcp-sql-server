@@ -11,7 +11,7 @@ final class ConnectionResource
 {
     public const string URI_TEMPLATE = 'db://{connection}';
     public const string NAME = 'connection';
-    public const string DESCRIPTION = 'List available tables in a database connection. Use this to discover tables before reading their schema.';
+    public const string DESCRIPTION = 'CRITICAL: Mapping of all tables in this database connection. Read this first before query to avoid table-not-found errors, then read db://{connection}/{table} for schema details.';
 
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,

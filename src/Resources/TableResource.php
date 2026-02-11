@@ -11,7 +11,7 @@ final class TableResource
 {
     public const string URI_TEMPLATE = 'db://{connection}/{table}';
     public const string NAME = 'table';
-    public const string DESCRIPTION = 'Database table schema (CREATE TABLE syntax). Use this to understand table structure before writing queries.';
+    public const string DESCRIPTION = 'Action: Read this after db://{connection} to inspect exact table schema (CREATE TABLE syntax) before writing SQL. Use it to confirm column names, types, and constraints.';
 
     public function __construct(
         private DoctrineConfigLoader $doctrineConfigLoader,

@@ -22,6 +22,11 @@ final class QueryTool
 Runs read-only SQL queries against chosen database connection.
 Only SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.
 
+START HERE - REQUIRED DISCOVERY FLOW:
+- Before writing SQL, read db://{connection} to list available tables for the target connection.
+- Then read db://{connection}/{table} for the exact schema of tables you plan to query.
+- This avoids "table not found" and wrong-column errors.
+
 CRITICAL - ROW LIMIT:
 - ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.
 - MySQL/PostgreSQL/SQLite: Use LIMIT 10
@@ -98,6 +103,8 @@ DESCRIPTION;
     public static function getDescription(DoctrineConfigLoader $doctrineConfigLoader): string
     {
         $description = self::DESCRIPTION;
+
+        $description .= "\nRead db://<connection> before calling this tool for any connection below.";
 
         $description .= "\nAvailable connections:";
 

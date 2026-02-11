@@ -3,7 +3,7 @@
         {
             "name": "table",
             "uriTemplate": "db://{connection}/{table}",
-            "description": "Database table schema (CREATE TABLE syntax). Use this to understand table structure before writing queries.",
+            "description": "Action: Read this after db://{connection} to inspect exact table schema (CREATE TABLE syntax) before writing SQL. Use it to confirm column names, types, and constraints.",
             "mimeType": "text/plain"
         }
     ]
