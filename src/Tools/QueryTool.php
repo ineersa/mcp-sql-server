@@ -104,8 +104,6 @@ DESCRIPTION;
     {
         $description = self::DESCRIPTION;
 
-        $description .= "\nRead db://<connection> before calling this tool for any connection below.";
-
         $description .= "\nAvailable connections:";
 
         foreach ($doctrineConfigLoader->getConnectionNames() as $connectionName) {

@@ -3,25 +3,25 @@
     {
       "name": "local",
       "uri": "db://local",
-      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before query to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
       "mimeType": "text/plain"
     },
     {
       "name": "products",
       "uri": "db://products",
-      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before query to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
       "mimeType": "text/plain"
     },
     {
       "name": "users",
       "uri": "db://users",
-      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before query to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
       "mimeType": "text/plain"
     },
     {
       "name": "server",
       "uri": "db://server",
-      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before query to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
       "mimeType": "text/plain"
     }
   ]
