@@ -26,10 +26,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 class DatabaseMcpCommand extends Command
 {
-    public const TEST2 = 'test2';
-
-    protected const TEST = 'test';
-
     public function __construct(
         private LoggerInterface $logger,
         private ContainerInterface $container,
