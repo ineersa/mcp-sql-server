@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "[3]{id,name,email}:\n  1,Diana,[REDACTED_email]\n  2,Eve,[REDACTED_email]\n  3,Frank,[REDACTED_email]"
+      "text": "[3]{id,name,email,age}:\n  1,Diana,[REDACTED_email],null\n  2,Eve,[REDACTED_email],null\n  3,Frank,[REDACTED_email],null"
     }
   ],
   "isError": false

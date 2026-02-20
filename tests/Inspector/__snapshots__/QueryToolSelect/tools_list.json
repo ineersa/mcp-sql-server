@@ -27,6 +27,40 @@
         "idempotentHint": false,
         "openWorldHint": false
       }
+    },
+    {
+      "name": "schema",
+      "description": "Get the exact structure of tables, views, and routines for a given database connection.\nUse this to understand foreign keys, nullable fields, and exact column types for writing precision SQL queries.\nWill return the schema matches as a Toon-encoded text.\n\nParams:\n- database (string): Connection name (required)\n- filter (string): Filter objects by name substring match (required)\n- include_views (bool): Defaults to false\n- include_routines (bool): Defaults to false",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string"
+          },
+          "filter": {
+            "type": "string"
+          },
+          "includeViews": {
+            "type": "boolean",
+            "default": false
+          },
+          "includeRoutines": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "connection",
+          "filter"
+        ]
+      },
+      "annotations": {
+        "title": "Database Schema structure",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
     }
   ]
 }

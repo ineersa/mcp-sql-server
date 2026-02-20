@@ -1,9 +1,0 @@
-{
-  "contents": [
-    {
-      "uri": "db://server/users",
-      "mimeType": "text/plain",
-      "text": "CREATE TABLE users (id INT NOT NULL, name NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL, email NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL, PRIMARY KEY (id));"
-    }
-  ]
-}

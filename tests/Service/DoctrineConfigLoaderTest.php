@@ -253,7 +253,7 @@ YAML;
         $loader->loadAndValidate();
 
         $connection = $loader->getConnection('test');
-        $this->assertNotNull($connection);
+        $this->assertInstanceOf(\Doctrine\DBAL\Connection::class, $connection);
         $this->assertSame('pdo_sqlite', $loader->getConnectionType('test'));
 
         // Test with driverOptions
@@ -274,7 +274,7 @@ YAML;
         $loader2->loadAndValidate();
 
         $connection2 = $loader2->getConnection('test2');
-        $this->assertNotNull($connection2);
+        $this->assertInstanceOf(\Doctrine\DBAL\Connection::class, $connection2);
         $this->assertSame('pdo_sqlite', $loader2->getConnectionType('test2'));
     }
 }

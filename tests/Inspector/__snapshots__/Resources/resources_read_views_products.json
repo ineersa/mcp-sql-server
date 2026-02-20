@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://products/views",
+      "mimeType": "text/plain",
+      "text": "[1]: \"\\\"active_users\\\"\""
+    }
+  ]
+}

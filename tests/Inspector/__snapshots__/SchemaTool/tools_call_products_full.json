@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_mysql\ntables:\n  \"\\\"users\\\"\":\n    columns:\n      id:\n        type: Integer\n        nullable: false\n        default: null\n        auto_increment: false\n      name:\n        type: String\n        nullable: false\n        default: null\n        auto_increment: false\n      email:\n        type: String\n        nullable: false\n        default: null\n        auto_increment: false\n      age:\n        type: Integer\n        nullable: true\n        default: null\n        auto_increment: false\n    indexes:\n      primary:\n        columns[1]: \"\\\"id\\\"\"\n        is_unique: true\n        is_primary: true\n    foreign_keys[0]:\n    triggers[1]{name,event,timing,statement}:\n      trg_users_insert,INSERT,AFTER,\"BEGIN\\n                SET @last_user_id = NEW.id;\\n            END\"\n    check_constraints[1]{name,definition}:\n      chk_users_age,(`age` >= 0)\nviews:\n  \"\\\"active_users\\\"\":\n    sql: \"select `mcp_test`.`users`.`id` AS `id`,`mcp_test`.`users`.`name` AS `name`,`mcp_test`.`users`.`email` AS `email` from `mcp_test`.`users` where (`mcp_test`.`users`.`name` <> '')\"\nroutines:\n  stored_procedures[0]:\n  functions[0]:\n  sequences[0]:"
+    }
+  ],
+  "isError": false
+}

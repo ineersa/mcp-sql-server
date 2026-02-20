@@ -7,9 +7,33 @@
       "mimeType": "text/plain"
     },
     {
+      "name": "local_views",
+      "uri": "db://local/views",
+      "description": "List all database views available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "local_routines",
+      "uri": "db://local/routines",
+      "description": "List all stored procedures and functions available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
       "name": "products",
       "uri": "db://products",
       "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "products_views",
+      "uri": "db://products/views",
+      "description": "List all database views available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "products_routines",
+      "uri": "db://products/routines",
+      "description": "List all stored procedures and functions available on the particular connection.",
       "mimeType": "text/plain"
     },
     {
@@ -19,9 +43,33 @@
       "mimeType": "text/plain"
     },
     {
+      "name": "users_views",
+      "uri": "db://users/views",
+      "description": "List all database views available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "users_routines",
+      "uri": "db://users/routines",
+      "description": "List all stored procedures and functions available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
       "name": "server",
       "uri": "db://server",
       "description": "CRITICAL: Mapping of all tables in this database connection. Read this first before querying to avoid table-not-found errors, then read db://{connection}/{table} for schema details.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "server_views",
+      "uri": "db://server/views",
+      "description": "List all database views available on the particular connection.",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "server_routines",
+      "uri": "db://server/routines",
+      "description": "List all stored procedures and functions available on the particular connection.",
       "mimeType": "text/plain"
     }
   ]

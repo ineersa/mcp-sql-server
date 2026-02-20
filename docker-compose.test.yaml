@@ -8,6 +8,8 @@ services:
             MYSQL_PASSWORD: test_password
         ports:
             - "13306:3306"
+        volumes:
+            - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
         healthcheck:
             test:
                 [

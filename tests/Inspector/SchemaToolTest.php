@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Inspector;
 
-final class ResourcesTest extends InspectorSnapshotTestCase
+final class SchemaToolTest extends InspectorSnapshotTestCase
 {
     protected function setUp(): void
     {
@@ -26,52 +26,56 @@ final class ResourcesTest extends InspectorSnapshotTestCase
      */
     public static function provideMethods(): array
     {
-        $baseTests = [
-            'Resource Listing' => ['method' => 'resources/list'],
-            'Resource Template Listing' => ['method' => 'resources/templates/list'],
-        ];
-
-        $envVars = [
-            'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
-        ];
-
-        foreach (['local', 'products', 'users', 'server'] as $connection) {
-            $baseTests[\sprintf('Connection Resource - %s', $connection)] = [
-                'method' => 'resources/read',
-                'options' => [
-                    'uri' => \sprintf('db://%s', $connection),
-                    'envVars' => $envVars,
-                ],
-                'testName' => \sprintf('connection_%s', $connection),
-            ];
-        }
+        $baseTests = [];
 
         foreach (['local', 'products'] as $connection) {
-            $baseTests[\sprintf('Table Resource - %s', $connection)] = [
-                'method' => 'resources/read',
+            $baseTests[\sprintf('Schema Tool - %s (Basic)', $connection)] = [
+                'method' => 'tools/call',
                 'options' => [
-                    'uri' => \sprintf('db://%s/users', $connection),
-                    'envVars' => $envVars,
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'users',
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
                 ],
-                'testName' => \sprintf('table_%s', $connection),
+                'testName' => $connection.'_basic',
             ];
 
-            $baseTests[\sprintf('Views Resource - %s', $connection)] = [
-                'method' => 'resources/read',
+            $baseTests[\sprintf('Schema Tool - %s (With Views and Routines)', $connection)] = [
+                'method' => 'tools/call',
                 'options' => [
-                    'uri' => \sprintf('db://%s/views', $connection),
-                    'envVars' => $envVars,
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'users',
+                        'includeViews' => true,
+                        'includeRoutines' => true,
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
                 ],
-                'testName' => \sprintf('views_%s', $connection),
+                'testName' => $connection.'_full',
             ];
 
-            $baseTests[\sprintf('Routines Resource - %s', $connection)] = [
-                'method' => 'resources/read',
+            $baseTests[\sprintf('Schema Tool - %s (With Filter)', $connection)] = [
+                'method' => 'tools/call',
                 'options' => [
-                    'uri' => \sprintf('db://%s/routines', $connection),
-                    'envVars' => $envVars,
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'users',
+                        'includeViews' => true,
+                        'includeRoutines' => true,
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
                 ],
-                'testName' => \sprintf('routines_%s', $connection),
+                'testName' => $connection.'_filter',
             ];
         }
 
@@ -84,7 +88,7 @@ final class ResourcesTest extends InspectorSnapshotTestCase
         $testSlug = $testName ? '_'.$testName : '';
 
         return \sprintf(
-            '%s/tests/Inspector/__snapshots__/Resources/%s%s.json',
+            '%s/tests/Inspector/__snapshots__/SchemaTool/%s%s.json',
             \dirname(__DIR__, 2),
             $methodSlug,
             $testSlug
