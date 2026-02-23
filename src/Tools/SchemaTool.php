@@ -32,6 +32,10 @@ Use detail="summary" (default) to list matching object names.
 Use detail="columns" to list matching tables with column types.
 Use detail="full" to return full structures (columns, indexes, foreign keys, triggers, check constraints).
 
+Filter note:
+- filter is required and matches object names (tables, views, procedures, functions, sequences).
+- Use filter="" to include all object names.
+
 Recommended flow:
 1. Call with detail="summary" and empty filter to discover names.
 2. Call with detail="columns" to inspect column names and types.
@@ -40,6 +44,9 @@ Recommended flow:
 Routine note:
 - includeRoutines=true returns stored_procedures, functions, and sequences.
 - In PostgreSQL, many routines are exposed as functions (not procedures).
+
+Metadata note:
+- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.
 
 If detail="columns" or detail="full" output is too large, the tool returns ToolUsageError and asks for a narrower filter.
 DESCRIPTION;
@@ -70,7 +77,7 @@ DESCRIPTION;
 
     /**
      * @param string $connection      Connection name
-     * @param string $filter          Object name filter; empty string means all
+     * @param string $filter          Required object-name filter; empty string means all
      * @param string $detail          Schema detail level: summary, columns, or full
      * @param string $matchMode       Filter matching mode: contains, prefix, exact, glob
      * @param bool   $includeViews    Include views in response
