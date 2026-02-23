@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_mysql\ndetail: columns\nmatch_mode: contains\ntables:\n  \"\\\"users\\\"\":\n    columns:\n      id: Integer\n      name: String\n      email: String\n      age: Integer"
+    }
+  ],
+  "isError": false
+}

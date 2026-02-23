@@ -30,22 +30,36 @@
     },
     {
       "name": "schema",
-      "description": "Get the exact structure of tables, views, and routines for a given database connection.\nUse this to understand foreign keys, nullable fields, and exact column types for writing precision SQL queries.\nWill return the schema matches as a Toon-encoded text.\n\nParams:\n- database (string): Connection name (required)\n- filter (string): Filter objects by name substring match (required)\n- include_views (bool): Defaults to false\n- include_routines (bool): Defaults to false",
+      "description": "Inspect schema for a database connection.\n\nUse detail=\"summary\" (default) to list matching object names.\nUse detail=\"columns\" to list matching tables with column types.\nUse detail=\"full\" to return full structures (columns, indexes, foreign keys, triggers, check constraints).\n\nRecommended flow:\n1. Call with detail=\"summary\" and empty filter to discover names.\n2. Call with detail=\"columns\" to inspect column names and types.\n3. Call again with a refined filter and detail=\"full\" for exact structure.\n\nRoutine note:\n- includeRoutines=true returns stored_procedures, functions, and sequences.\n- In PostgreSQL, many routines are exposed as functions (not procedures).\n\nIf detail=\"columns\" or detail=\"full\" output is too large, the tool returns ToolUsageError and asks for a narrower filter.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "connection": {
-            "type": "string"
+            "type": "string",
+            "description": "Connection name"
           },
           "filter": {
-            "type": "string"
+            "type": "string",
+            "description": "Object name filter; empty string means all"
+          },
+          "detail": {
+            "type": "string",
+            "description": "Schema detail level: summary, columns, or full",
+            "default": "summary"
+          },
+          "matchMode": {
+            "type": "string",
+            "description": "Filter matching mode: contains, prefix, exact, glob",
+            "default": "contains"
           },
           "includeViews": {
             "type": "boolean",
+            "description": "Include views in response",
             "default": false
           },
           "includeRoutines": {
             "type": "boolean",
+            "description": "Include procedures, functions, and sequences in response",
             "default": false
           }
         },

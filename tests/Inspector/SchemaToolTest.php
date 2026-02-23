@@ -51,6 +51,7 @@ final class SchemaToolTest extends InspectorSnapshotTestCase
                     'toolArgs' => [
                         'connection' => $connection,
                         'filter' => 'users',
+                        'detail' => 'full',
                         'includeViews' => true,
                         'includeRoutines' => true,
                     ],
@@ -61,13 +62,48 @@ final class SchemaToolTest extends InspectorSnapshotTestCase
                 'testName' => $connection.'_full',
             ];
 
-            $baseTests[\sprintf('Schema Tool - %s (With Filter)', $connection)] = [
+            $baseTests[\sprintf('Schema Tool - %s (Columns Detail)', $connection)] = [
                 'method' => 'tools/call',
                 'options' => [
                     'toolName' => 'schema',
                     'toolArgs' => [
                         'connection' => $connection,
                         'filter' => 'users',
+                        'detail' => 'columns',
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
+                ],
+                'testName' => $connection.'_columns',
+            ];
+
+            $baseTests[\sprintf('Schema Tool - %s (Columns + Glob Match)', $connection)] = [
+                'method' => 'tools/call',
+                'options' => [
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'user*',
+                        'detail' => 'columns',
+                        'matchMode' => 'glob',
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
+                ],
+                'testName' => $connection.'_columns_glob',
+            ];
+
+            $baseTests[\sprintf('Schema Tool - %s (With Match Mode)', $connection)] = [
+                'method' => 'tools/call',
+                'options' => [
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'use',
+                        'detail' => 'summary',
+                        'matchMode' => 'prefix',
                         'includeViews' => true,
                         'includeRoutines' => true,
                     ],

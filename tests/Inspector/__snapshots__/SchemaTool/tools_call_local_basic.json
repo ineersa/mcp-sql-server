@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "engine: pdo_sqlite\ntables:\n  \"\\\"users\\\"\":\n    columns:\n      id:\n        type: Integer\n        nullable: false\n        default: null\n        auto_increment: false\n      name:\n        type: Text\n        nullable: false\n        default: null\n        auto_increment: false\n      email:\n        type: Text\n        nullable: false\n        default: null\n        auto_increment: false\n      age:\n        type: Integer\n        nullable: true\n        default: null\n        auto_increment: false\n    indexes:\n      primary:\n        columns[1]: \"\\\"id\\\"\"\n        is_unique: true\n        is_primary: true\n    foreign_keys[0]:\n    triggers[1]{name,statement}:\n      trg_users_insert,\"CREATE TRIGGER trg_users_insert\\n            AFTER INSERT ON users\\n            BEGIN\\n                SELECT 1;\\n            END\"\n    check_constraints[0]:"
+      "text": "engine: pdo_sqlite\ndetail: summary\nmatch_mode: contains\ntables[1]: \"\\\"users\\\"\""
     }
   ],
   "isError": false

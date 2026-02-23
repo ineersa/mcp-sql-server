@@ -12,34 +12,45 @@ use Symfony\Contracts\Cache\ItemInterface;
 
 final class DatabaseSchemaService
 {
+    private const string DETAIL_SUMMARY = 'summary';
+    private const string DETAIL_COLUMNS = 'columns';
+    private const string DETAIL_FULL = 'full';
+
+    private const string MATCH_MODE_CONTAINS = 'contains';
+    private const string MATCH_MODE_PREFIX = 'prefix';
+    private const string MATCH_MODE_EXACT = 'exact';
+    private const string MATCH_MODE_GLOB = 'glob';
+
     public function __construct(
         private CacheInterface $cache,
         private LoggerInterface $logger,
     ) {
     }
 
-    /**
-     * @return array{engine: string, tables: array<string, mixed>, views?: array<mixed>, routines?: array{stored_procedures: array<mixed>, functions: array<mixed>, sequences: array<mixed>}}
-     */
+    /** @return array<string, mixed> */
     public function getSchemaStructure(
         Connection $conn,
         string $engineName,
         string $filter,
+        string $detail,
+        string $matchMode,
         bool $includeViews,
         bool $includeRoutines,
     ): array {
         $cacheKey = \sprintf(
-            'database_schema_%s_%s_%d_%d',
+            'database_schema_%s_%s_%s_%s_%d_%d',
             md5(serialize($conn->getParams())),
             md5($filter),
+            md5($detail),
+            md5($matchMode),
             (int) $includeViews,
             (int) $includeRoutines
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $includeViews, $includeRoutines) {
+        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines) {
             $item->expiresAfter(60);
 
-            return $this->buildSchemaStructure($conn, $engineName, $filter, $includeViews, $includeRoutines);
+            return $this->buildSchemaStructure($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines);
         });
     }
 
@@ -67,30 +78,47 @@ final class DatabaseSchemaService
         ];
     }
 
-    /**
-     * @return array{engine: string, tables: array<string, mixed>, views?: array<mixed>, routines?: array{stored_procedures: array<mixed>, functions: array<mixed>, sequences: array<mixed>}}
-     */
+    /** @return array<string, mixed> */
     private function buildSchemaStructure(
         Connection $conn,
         string $engineName,
         string $filter,
+        string $detail,
+        string $matchMode,
         bool $includeViews,
         bool $includeRoutines,
     ): array {
+        $normalizedDetail = $this->normalizeDetail($detail);
+        $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
+
         $result = [
             'engine' => $engineName,
-            'tables' => $this->getAllTablesStructure($conn, $filter),
+            'detail' => $normalizedDetail,
+            'match_mode' => $normalizedMatchMode,
+            'tables' => match ($normalizedDetail) {
+                self::DETAIL_SUMMARY => $this->getAllTableNames($conn, $filter, $normalizedMatchMode),
+                self::DETAIL_COLUMNS => $this->getAllTableColumnsStructure($conn, $filter, $normalizedMatchMode),
+                default => $this->getAllTablesStructure($conn, $filter, $normalizedMatchMode),
+            },
         ];
 
         if ($includeViews) {
-            $result['views'] = $this->getViewsStructure($conn, $filter);
+            $result['views'] = self::DETAIL_FULL === $normalizedDetail
+                ? $this->getViewsStructure($conn, $filter, $normalizedMatchMode)
+                : $this->getViewNames($conn, $filter, $normalizedMatchMode);
         }
 
         if ($includeRoutines) {
             $result['routines'] = [
-                'stored_procedures' => $this->getStoredProceduresStructure($conn, $filter),
-                'functions' => $this->getFunctionsStructure($conn, $filter),
-                'sequences' => $this->getSequencesStructure($conn, $filter),
+                'stored_procedures' => self::DETAIL_FULL === $normalizedDetail
+                    ? $this->getStoredProceduresStructure($conn, $filter, $normalizedMatchMode)
+                    : $this->getStoredProceduresNames($conn, $filter, $normalizedMatchMode),
+                'functions' => self::DETAIL_FULL === $normalizedDetail
+                    ? $this->getFunctionsStructure($conn, $filter, $normalizedMatchMode)
+                    : $this->getFunctionsNames($conn, $filter, $normalizedMatchMode),
+                'sequences' => self::DETAIL_FULL === $normalizedDetail
+                    ? $this->getSequencesStructure($conn, $filter, $normalizedMatchMode)
+                    : $this->getSequencesNames($conn, $filter, $normalizedMatchMode),
             ];
         }
 
@@ -100,7 +128,7 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getAllTablesStructure(Connection $conn, string $filter): array
+    private function getAllTablesStructure(Connection $conn, string $filter, string $matchMode): array
     {
         $schemaManager = $conn->createSchemaManager();
         $structures = [];
@@ -108,7 +136,7 @@ final class DatabaseSchemaService
         foreach ($schemaManager->introspectTables() as $table) {
             $tableName = $table->getObjectName()->toString();
 
-            if ('' !== $filter && !str_contains(strtolower($tableName), strtolower($filter))) {
+            if (!$this->matchesFilter($tableName, $filter, $matchMode)) {
                 continue;
             }
 
@@ -177,17 +205,61 @@ final class DatabaseSchemaService
         return $structures;
     }
 
+    /** @return list<string> */
+    private function getAllTableNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $tableNames = [];
+
+        foreach ($conn->createSchemaManager()->introspectTables() as $table) {
+            $tableName = $table->getObjectName()->toString();
+            if (!$this->matchesFilter($tableName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $tableNames[] = $tableName;
+        }
+
+        return $tableNames;
+    }
+
+    /** @return array<string, array{columns: array<string, string>}> */
+    private function getAllTableColumnsStructure(Connection $conn, string $filter, string $matchMode): array
+    {
+        $tables = [];
+
+        foreach ($conn->createSchemaManager()->introspectTables() as $table) {
+            $tableName = $table->getObjectName()->toString();
+
+            if (!$this->matchesFilter($tableName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $columns = [];
+            foreach ($table->getColumns() as $column) {
+                $typeClass = \get_class($column->getType());
+                $typeParts = explode('\\', $typeClass);
+                $columns[$column->getName()] = str_replace('Type', '', end($typeParts));
+            }
+
+            $tables[$tableName] = [
+                'columns' => $columns,
+            ];
+        }
+
+        return $tables;
+    }
+
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getViewsStructure(Connection $conn, string $filter): array
+    private function getViewsStructure(Connection $conn, string $filter, string $matchMode): array
     {
         $views = [];
 
         foreach ($conn->createSchemaManager()->introspectViews() as $view) {
             $viewName = $view->getObjectName()->toString();
 
-            if ('' !== $filter && !str_contains(strtolower($viewName), strtolower($filter))) {
+            if (!$this->matchesFilter($viewName, $filter, $matchMode)) {
                 continue;
             }
 
@@ -197,6 +269,23 @@ final class DatabaseSchemaService
         }
 
         return $views;
+    }
+
+    /** @return list<string> */
+    private function getViewNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $viewNames = [];
+
+        foreach ($conn->createSchemaManager()->introspectViews() as $view) {
+            $viewName = $view->getObjectName()->toString();
+            if (!$this->matchesFilter($viewName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $viewNames[] = $viewName;
+        }
+
+        return $viewNames;
     }
 
     /**
@@ -248,18 +337,34 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getStoredProceduresStructure(Connection $conn, string $filter): array
+    private function getStoredProceduresStructure(Connection $conn, string $filter, string $matchMode): array
     {
         $structures = [];
 
         foreach ($this->getStoredProcedures($conn) as $proc) {
-            if ('' !== $filter && !str_contains(strtolower($proc), strtolower($filter))) {
+            if (!$this->matchesFilter($proc, $filter, $matchMode)) {
                 continue;
             }
             $structures[$proc] = ['type' => 'procedure'];
         }
 
         return $structures;
+    }
+
+    /** @return list<string> */
+    private function getStoredProceduresNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $names = [];
+
+        foreach ($this->getStoredProcedures($conn) as $procedureName) {
+            if (!$this->matchesFilter($procedureName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $names[] = $procedureName;
+        }
+
+        return $names;
     }
 
     /**
@@ -311,12 +416,12 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getFunctionsStructure(Connection $conn, string $filter): array
+    private function getFunctionsStructure(Connection $conn, string $filter, string $matchMode): array
     {
         $structures = [];
 
         foreach ($this->getFunctions($conn) as $func) {
-            if ('' !== $filter && !str_contains(strtolower($func), strtolower($filter))) {
+            if (!$this->matchesFilter($func, $filter, $matchMode)) {
                 continue;
             }
             $structures[$func] = ['type' => 'function'];
@@ -325,10 +430,26 @@ final class DatabaseSchemaService
         return $structures;
     }
 
+    /** @return list<string> */
+    private function getFunctionsNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $names = [];
+
+        foreach ($this->getFunctions($conn) as $functionName) {
+            if (!$this->matchesFilter($functionName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $names[] = $functionName;
+        }
+
+        return $names;
+    }
+
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getSequencesStructure(Connection $conn, string $filter): array
+    private function getSequencesStructure(Connection $conn, string $filter, string $matchMode): array
     {
         $sequences = [];
 
@@ -336,7 +457,7 @@ final class DatabaseSchemaService
             foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
                 $seqName = $sequence->getObjectName()->toString();
 
-                if ('' !== $filter && !str_contains(strtolower($seqName), strtolower($filter))) {
+                if (!$this->matchesFilter($seqName, $filter, $matchMode)) {
                     continue;
                 }
 
@@ -350,6 +471,28 @@ final class DatabaseSchemaService
         }
 
         return $sequences;
+    }
+
+    /** @return list<string> */
+    private function getSequencesNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $names = [];
+
+        try {
+            foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+                $sequenceName = $sequence->getObjectName()->toString();
+
+                if (!$this->matchesFilter($sequenceName, $filter, $matchMode)) {
+                    continue;
+                }
+
+                $names[] = $sequenceName;
+            }
+        } catch (\Exception) {
+            // Platform might not support sequences
+        }
+
+        return $names;
     }
 
     /**
@@ -459,6 +602,48 @@ final class DatabaseSchemaService
         }
 
         return [];
+    }
+
+    private function normalizeDetail(string $detail): string
+    {
+        $normalized = strtolower(trim($detail));
+
+        return match ($normalized) {
+            self::DETAIL_FULL => self::DETAIL_FULL,
+            self::DETAIL_COLUMNS => self::DETAIL_COLUMNS,
+            default => self::DETAIL_SUMMARY,
+        };
+    }
+
+    private function normalizeMatchMode(string $matchMode): string
+    {
+        $normalized = strtolower(trim($matchMode));
+
+        return match ($normalized) {
+            self::MATCH_MODE_PREFIX,
+            self::MATCH_MODE_EXACT,
+            self::MATCH_MODE_GLOB,
+            self::MATCH_MODE_CONTAINS => $normalized,
+            default => self::MATCH_MODE_CONTAINS,
+        };
+    }
+
+    private function matchesFilter(string $objectName, string $filter, string $matchMode): bool
+    {
+        if ('' === trim($filter)) {
+            return true;
+        }
+
+        $normalizedName = strtolower(trim($objectName, '"\' '));
+        $normalizedFilter = strtolower(trim($filter));
+        $normalizedMode = $this->normalizeMatchMode($matchMode);
+
+        return match ($normalizedMode) {
+            self::MATCH_MODE_PREFIX => str_starts_with($normalizedName, $normalizedFilter),
+            self::MATCH_MODE_EXACT => $normalizedName === $normalizedFilter,
+            self::MATCH_MODE_GLOB => fnmatch($normalizedFilter, $normalizedName),
+            default => str_contains($normalizedName, $normalizedFilter),
+        };
     }
 
     private function detectDriver(Connection $conn): string

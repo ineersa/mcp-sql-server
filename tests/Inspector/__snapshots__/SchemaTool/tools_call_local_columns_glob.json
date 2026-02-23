@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_sqlite\ndetail: columns\nmatch_mode: glob\ntables:\n  \"\\\"users\\\"\":\n    columns:\n      id: Integer\n      name: Text\n      email: Text\n      age: Integer"
+    }
+  ],
+  "isError": false
+}
