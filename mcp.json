@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "symfony-ai-mate": {
+            "command": "/home/ineersa/mcp-servers/mysql-server/vendor/bin/mate",
+            "args": ["serve", "--force-keep-alive"]
+        }
+    }
+}

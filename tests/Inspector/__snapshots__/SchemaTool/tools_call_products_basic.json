@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_mysql\ndetail: summary\nmatch_mode: contains\ntables[1]: \"\\\"users\\\"\""
+    }
+  ],
+  "isError": false
+}

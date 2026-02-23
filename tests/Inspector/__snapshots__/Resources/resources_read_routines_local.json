@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://local/routines",
+      "mimeType": "text/plain",
+      "text": "stored_procedures[0]:\nfunctions[0]:"
+    }
+  ]
+}

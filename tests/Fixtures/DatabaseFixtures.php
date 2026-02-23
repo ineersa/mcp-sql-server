@@ -18,6 +18,8 @@ final class DatabaseFixtures
     {
         $type = self::detectDatabaseType($connection);
 
+        self::dropExtras($connection, $type);
+
         // Drop tables in reverse order due to potential foreign keys
         $connection->executeStatement('DROP TABLE IF EXISTS pii_samples');
         $connection->executeStatement('DROP TABLE IF EXISTS products');
@@ -31,6 +33,7 @@ final class DatabaseFixtures
         self::createUsersTable($connection, $type);
         self::createProductsTable($connection, $type);
         self::createPiiSamplesTable($connection, $type);
+        self::createExtras($connection, $type);
     }
 
     public static function loadFixtures(Connection $connection): void
@@ -184,28 +187,35 @@ final class DatabaseFixtures
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
-                    email TEXT NOT NULL
+                    email TEXT NOT NULL,
+                    age INTEGER CHECK (age >= 0)
                 )
             ',
             'pdo_mysql' => '
                 CREATE TABLE users (
                     id INT PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
-                    email VARCHAR(255) NOT NULL
+                    email VARCHAR(255) NOT NULL,
+                    age INT NULL,
+                    CONSTRAINT chk_users_age CHECK (age >= 0)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ',
             'pdo_pgsql' => '
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
-                    email VARCHAR(255) NOT NULL
+                    email VARCHAR(255) NOT NULL,
+                    age INTEGER NULL,
+                    CONSTRAINT chk_users_age CHECK (age >= 0)
                 )
             ',
             'pdo_sqlsrv' => '
                 CREATE TABLE users (
                     id INT PRIMARY KEY,
                     name NVARCHAR(255) NOT NULL,
-                    email NVARCHAR(255) NOT NULL
+                    email NVARCHAR(255) NOT NULL,
+                    age INT NULL,
+                    CONSTRAINT chk_users_age CHECK (age >= 0)
                 )
             ',
             default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),
@@ -306,5 +316,182 @@ final class DatabaseFixtures
         };
 
         $connection->executeStatement($sql);
+    }
+
+    private static function createExtras(Connection $connection, string $type): void
+    {
+        match ($type) {
+            'pdo_sqlite' => self::createSqliteExtras($connection),
+            'pdo_mysql' => self::createMysqlExtras($connection),
+            'pdo_pgsql' => self::createPgsqlExtras($connection),
+            'pdo_sqlsrv' => self::createSqlsrvExtras($connection),
+            default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),
+        };
+    }
+
+    private static function dropExtras(Connection $connection, string $type): void
+    {
+        match ($type) {
+            'pdo_sqlite' => self::dropSqliteExtras($connection),
+            'pdo_mysql' => self::dropMysqlExtras($connection),
+            'pdo_pgsql' => self::dropPgsqlExtras($connection),
+            'pdo_sqlsrv' => self::dropSqlsrvExtras($connection),
+            default => throw new \RuntimeException(\sprintf('Unknown database type: %s', $type)),
+        };
+    }
+
+    private static function createSqliteExtras(Connection $connection): void
+    {
+        // View: active_users
+        $connection->executeStatement('
+            CREATE VIEW IF NOT EXISTS active_users AS
+            SELECT id, name, email FROM users WHERE name != \'\'
+        ');
+
+        // Trigger: log insert on users (SQLite has no stored procs/functions)
+        $connection->executeStatement('
+            CREATE TRIGGER IF NOT EXISTS trg_users_insert
+            AFTER INSERT ON users
+            BEGIN
+                SELECT 1;
+            END
+        ');
+    }
+
+    private static function dropSqliteExtras(Connection $connection): void
+    {
+        $connection->executeStatement('DROP TRIGGER IF EXISTS trg_users_insert');
+        $connection->executeStatement('DROP VIEW IF EXISTS active_users');
+    }
+
+    private static function createMysqlExtras(Connection $connection): void
+    {
+        // View: active_users
+        $connection->executeStatement('
+            CREATE OR REPLACE VIEW active_users AS
+            SELECT id, name, email FROM users WHERE name != \'\'
+        ');
+
+        // Stored procedure: get_user_count
+        $connection->executeStatement('
+            CREATE PROCEDURE get_user_count(OUT cnt INT)
+            BEGIN
+                SELECT COUNT(*) INTO cnt FROM users;
+            END
+        ');
+
+        // Trigger: trg_users_insert
+        $connection->executeStatement('
+            CREATE TRIGGER trg_users_insert
+            AFTER INSERT ON users
+            FOR EACH ROW
+            BEGIN
+                SET @last_user_id = NEW.id;
+            END
+        ');
+    }
+
+    private static function dropMysqlExtras(Connection $connection): void
+    {
+        $connection->executeStatement('DROP TRIGGER IF EXISTS trg_users_insert');
+        $connection->executeStatement('DROP PROCEDURE IF EXISTS get_user_count');
+        $connection->executeStatement('DROP VIEW IF EXISTS active_users');
+    }
+
+    private static function createPgsqlExtras(Connection $connection): void
+    {
+        // View: active_users
+        $connection->executeStatement('
+            CREATE OR REPLACE VIEW active_users AS
+            SELECT id, name, email FROM users WHERE name != \'\'
+        ');
+
+        // Function: get_user_count
+        $connection->executeStatement('
+            CREATE OR REPLACE FUNCTION get_user_count()
+            RETURNS INTEGER AS $$
+            BEGIN
+                RETURN (SELECT COUNT(*) FROM users);
+            END;
+            $$ LANGUAGE plpgsql
+        ');
+
+        // Trigger function + trigger: trg_users_insert
+        $connection->executeStatement('
+            CREATE OR REPLACE FUNCTION trg_users_insert_fn()
+            RETURNS trigger AS $$
+            BEGIN
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql
+        ');
+
+        $connection->executeStatement('
+            CREATE TRIGGER trg_users_insert
+            AFTER INSERT ON users
+            FOR EACH ROW EXECUTE PROCEDURE trg_users_insert_fn()
+        ');
+
+        // Sequence: order_seq
+        $connection->executeStatement('
+            CREATE SEQUENCE IF NOT EXISTS order_seq START 1000 INCREMENT 10
+        ');
+    }
+
+    private static function dropPgsqlExtras(Connection $connection): void
+    {
+        $connection->executeStatement('DROP TRIGGER IF EXISTS trg_users_insert ON users');
+        $connection->executeStatement('DROP FUNCTION IF EXISTS trg_users_insert_fn()');
+        $connection->executeStatement('DROP FUNCTION IF EXISTS get_user_count()');
+        $connection->executeStatement('DROP SEQUENCE IF EXISTS order_seq');
+        $connection->executeStatement('DROP VIEW IF EXISTS active_users');
+    }
+
+    private static function createSqlsrvExtras(Connection $connection): void
+    {
+        // View: active_users
+        $connection->executeStatement('
+            CREATE OR ALTER VIEW active_users AS
+            SELECT id, name, email FROM users WHERE name != \'\'
+        ');
+
+        // Stored procedure: get_user_count
+        $connection->executeStatement('
+            CREATE OR ALTER PROCEDURE get_user_count
+                @cnt INT OUTPUT
+            AS
+            BEGIN
+                SELECT @cnt = COUNT(*) FROM users;
+            END
+        ');
+
+        // Scalar function: double_price
+        $connection->executeStatement('
+            CREATE OR ALTER FUNCTION double_price(@p DECIMAL(10,2))
+            RETURNS DECIMAL(10,2)
+            AS
+            BEGIN
+                RETURN @p * 2;
+            END
+        ');
+
+        // Trigger: trg_users_insert
+        $connection->executeStatement('
+            CREATE OR ALTER TRIGGER trg_users_insert
+            ON users
+            AFTER INSERT
+            AS
+            BEGIN
+                SET NOCOUNT ON;
+            END
+        ');
+    }
+
+    private static function dropSqlsrvExtras(Connection $connection): void
+    {
+        $connection->executeStatement("IF OBJECT_ID('trg_users_insert', 'TR') IS NOT NULL DROP TRIGGER trg_users_insert");
+        $connection->executeStatement("IF OBJECT_ID('double_price', 'FN') IS NOT NULL DROP FUNCTION double_price");
+        $connection->executeStatement("IF OBJECT_ID('get_user_count', 'P') IS NOT NULL DROP PROCEDURE get_user_count");
+        $connection->executeStatement("IF OBJECT_ID('active_users', 'V') IS NOT NULL DROP VIEW active_users");
     }
 }

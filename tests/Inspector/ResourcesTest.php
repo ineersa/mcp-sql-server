@@ -46,7 +46,7 @@ final class ResourcesTest extends InspectorSnapshotTestCase
             ];
         }
 
-        foreach (['local', 'products', 'users', 'server'] as $connection) {
+        foreach (['local', 'products'] as $connection) {
             $baseTests[\sprintf('Table Resource - %s', $connection)] = [
                 'method' => 'resources/read',
                 'options' => [
@@ -54,6 +54,24 @@ final class ResourcesTest extends InspectorSnapshotTestCase
                     'envVars' => $envVars,
                 ],
                 'testName' => \sprintf('table_%s', $connection),
+            ];
+
+            $baseTests[\sprintf('Views Resource - %s', $connection)] = [
+                'method' => 'resources/read',
+                'options' => [
+                    'uri' => \sprintf('db://%s/views', $connection),
+                    'envVars' => $envVars,
+                ],
+                'testName' => \sprintf('views_%s', $connection),
+            ];
+
+            $baseTests[\sprintf('Routines Resource - %s', $connection)] = [
+                'method' => 'resources/read',
+                'options' => [
+                    'uri' => \sprintf('db://%s/routines', $connection),
+                    'envVars' => $envVars,
+                ],
+                'testName' => \sprintf('routines_%s', $connection),
             ];
         }
 

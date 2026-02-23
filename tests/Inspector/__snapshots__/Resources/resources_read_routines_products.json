@@ -1,0 +1,9 @@
+{
+  "contents": [
+    {
+      "uri": "db://products/routines",
+      "mimeType": "text/plain",
+      "text": "stored_procedures[1]: get_user_count\nfunctions[0]:"
+    }
+  ]
+}

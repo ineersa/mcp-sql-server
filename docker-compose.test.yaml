@@ -1,6 +1,8 @@
 services:
     mysql:
         image: mysql:8.0
+        command:
+            - --log-bin-trust-function-creators=1
         environment:
             MYSQL_ROOT_PASSWORD: root_password
             MYSQL_DATABASE: mcp_test
@@ -8,6 +10,8 @@ services:
             MYSQL_PASSWORD: test_password
         ports:
             - "13306:3306"
+        volumes:
+            - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
         healthcheck:
             test:
                 [
@@ -76,5 +80,4 @@ services:
                 condition: service_healthy
             sqlserver:
                 condition: service_healthy
-
 

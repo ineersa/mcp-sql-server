@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Resources\ConnectionResource;
+use App\Resources\RoutinesResource;
 use App\Resources\TableResource;
+use App\Resources\ViewsResource;
 use App\Service\ComposerMetadataExtractor;
+use App\Service\DatabaseSchemaService;
 use App\Service\DoctrineConfigLoader;
 use App\Tools\QueryTool;
+use App\Tools\SchemaTool;
 use Mcp\Schema\Enum\ProtocolVersion;
 use Mcp\Schema\ToolAnnotations;
 use Mcp\Server;
@@ -31,6 +35,7 @@ class DatabaseMcpCommand extends Command
         private ContainerInterface $container,
         private ComposerMetadataExtractor $composerMetadataExtractor,
         private DoctrineConfigLoader $doctrineConfigLoader,
+        private DatabaseSchemaService $databaseSchemaService,
     ) {
         parent::__construct();
     }
@@ -67,6 +72,21 @@ class DatabaseMcpCommand extends Command
                     null,
                     null,
                     null,
+                )
+                ->addTool(
+                    SchemaTool::class,
+                    SchemaTool::NAME,
+                    SchemaTool::DESCRIPTION,
+                    new ToolAnnotations(
+                        SchemaTool::TITLE,
+                        true,
+                        false,
+                        false,
+                        false
+                    ),
+                    null,
+                    null,
+                    null,
                 );
 
             foreach ($this->doctrineConfigLoader->getConnectionNames() as $connectionName) {
@@ -89,6 +109,48 @@ class DatabaseMcpCommand extends Command
                     "db://{$connectionName}",
                     $connectionName,
                     ConnectionResource::DESCRIPTION,
+                    mimeType: 'text/plain',
+                );
+
+                $builder->addResource(
+                    function (string $uri) use ($connectionName): string {
+                        try {
+                            $resource = new ViewsResource($this->databaseSchemaService, $this->doctrineConfigLoader);
+
+                            return $resource($connectionName);
+                        } catch (\Throwable $e) {
+                            $this->logger->error('Views resource read failed', [
+                                'uri' => $uri,
+                                'connection' => $connectionName,
+                                'error' => $e->getMessage(),
+                            ]);
+                            throw $e;
+                        }
+                    },
+                    "db://{$connectionName}/views",
+                    "{$connectionName}_views",
+                    ViewsResource::DESCRIPTION,
+                    mimeType: 'text/plain',
+                );
+
+                $builder->addResource(
+                    function (string $uri) use ($connectionName): string {
+                        try {
+                            $resource = new RoutinesResource($this->databaseSchemaService, $this->doctrineConfigLoader);
+
+                            return $resource($connectionName);
+                        } catch (\Throwable $e) {
+                            $this->logger->error('Routines resource read failed', [
+                                'uri' => $uri,
+                                'connection' => $connectionName,
+                                'error' => $e->getMessage(),
+                            ]);
+                            throw $e;
+                        }
+                    },
+                    "db://{$connectionName}/routines",
+                    "{$connectionName}_routines",
+                    RoutinesResource::DESCRIPTION,
                     mimeType: 'text/plain',
                 );
             }

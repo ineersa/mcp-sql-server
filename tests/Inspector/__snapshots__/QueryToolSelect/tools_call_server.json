@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "[3]{id,name,email}:\n  \"1\",Judy,judy@example.com\n  \"2\",Karl,karl@example.com\n  \"3\",Laura,laura@example.com"
+      "text": "[3]{id,name,email,age}:\n  \"1\",Judy,judy@example.com,null\n  \"2\",Karl,karl@example.com,null\n  \"3\",Laura,laura@example.com,null"
     }
   ],
   "isError": false

@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_mysql\ndetail: summary\nmatch_mode: prefix\ntables[1]: \"\\\"users\\\"\"\nviews[0]:\nroutines:\n  stored_procedures[0]:\n  functions[0]:\n  sequences[0]:"
+    }
+  ],
+  "isError": false
+}
