@@ -212,6 +212,36 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->assertNotEmpty($table['triggers']);
     }
 
+    public function testFullDetailCanFilterByTriggerName(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'trg_users_insert',
+            'full',
+            'exact',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('tables', $result);
+        $this->assertIsArray($result['tables']);
+        $this->assertCount(1, $result['tables']);
+
+        $tableName = array_key_first($result['tables']);
+        $this->assertIsString($tableName);
+        $this->assertSame('users', trim($tableName, '"\' '));
+
+        $table = reset($result['tables']);
+        $this->assertIsArray($table);
+        $this->assertArrayHasKey('triggers', $table);
+        $this->assertCount(1, $table['triggers']);
+        $this->assertSame('trg_users_insert', $table['triggers'][0]['name']);
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertArrayNotHasKey('triggers', $result['routines']);
+    }
+
     public function testInvalidDetailThrowsToolUsageError(): void
     {
         $this->expectException(ToolUsageError::class);

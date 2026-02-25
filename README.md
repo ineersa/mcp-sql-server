@@ -216,6 +216,10 @@ docker compose pull
 
 ## Available Tools
 
+**Response format (all tools below):**
+
+- **TOON text payload**: Results are returned as TOON-encoded data in `content[].text`
+
 ### `query`
 
 Executes read-only SQL queries against a specified database connection.
@@ -239,10 +243,36 @@ Executes read-only SQL queries against a specified database connection.
 }
 ```
 
-**Response format:**
+### `schema`
 
-- **Markdown**: Human-readable tables with row counts
-- **Structured JSON**: Machine-readable data with schema (in `structuredContent`)
+Inspects database schema metadata for a specified connection.
+
+**Parameters:**
+
+| Parameter         | Type    | Required | Description                                                                                      |
+| ----------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `connection`      | string  | Yes      | Name of the database connection to inspect                                                       |
+| `filter`          | string  | No       | Optional object-name filter (`""` for all)                                                      |
+| `detail`          | string  | No       | Detail level: `summary` (default), `columns`, or `full`                                         |
+| `matchMode`       | string  | No       | Filter matching mode: `contains` (default), `prefix`, `exact`, or `glob`                        |
+| `includeViews`    | boolean | No       | Include views in `summary`/`columns` output (always included in `full`)                          |
+| `includeRoutines` | boolean | No       | Include routines/triggers in `summary`/`columns` output (always included in `full`)              |
+
+**Example:**
+
+```json
+{
+    "name": "schema",
+    "arguments": {
+        "connection": "production",
+        "filter": "users",
+        "detail": "columns",
+        "matchMode": "contains",
+        "includeViews": false,
+        "includeRoutines": false
+    }
+}
+```
 
 ---
 

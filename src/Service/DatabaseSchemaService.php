@@ -156,10 +156,7 @@ final class DatabaseSchemaService
 
         foreach ($schemaManager->introspectTables() as $table) {
             $tableName = $table->getObjectName()->toString();
-
-            if (!$this->matchesFilter($tableName, $filter, $matchMode)) {
-                continue;
-            }
+            $tableNameMatchesFilter = $this->matchesFilter($tableName, $filter, $matchMode);
 
             $columns = [];
             foreach ($table->getColumns() as $column) {
@@ -217,12 +214,22 @@ final class DatabaseSchemaService
             // getObjectName()->toString() may return a quoted identifier like "users"
             // Strip surrounding quotes for use in raw SQL queries
             $rawTableName = trim($tableName, '"\' ');
+            $tableTriggers = $schemaInspector->getTableTriggers($conn, $rawTableName);
+            $matchingTriggers = $this->filterTableTriggers($tableTriggers, $filter, $matchMode);
+
+            if (!$tableNameMatchesFilter && '' !== trim($filter) && [] === $matchingTriggers) {
+                continue;
+            }
+
+            $triggersToReturn = $tableNameMatchesFilter || '' === trim($filter)
+                ? $tableTriggers
+                : $matchingTriggers;
 
             $structures[$tableName] = [
                 'columns' => $columns,
                 'indexes' => $indexes,
                 'foreign_keys' => $foreignKeys,
-                'triggers' => $schemaInspector->getTableTriggers($conn, $rawTableName),
+                'triggers' => $triggersToReturn,
                 'check_constraints' => $schemaInspector->getTableCheckConstraints($conn, $rawTableName),
             ];
         }
@@ -511,5 +518,22 @@ final class DatabaseSchemaService
     private function unquoteIdentifier(string $identifier): string
     {
         return trim($identifier, '"\'`[] ');
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $triggers
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterTableTriggers(array $triggers, string $filter, string $matchMode): array
+    {
+        if ('' === trim($filter)) {
+            return $triggers;
+        }
+
+        return array_values(array_filter(
+            $triggers,
+            fn (array $trigger): bool => $this->matchesFilter((string) ($trigger['name'] ?? ''), $filter, $matchMode),
+        ));
     }
 }
