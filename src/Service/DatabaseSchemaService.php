@@ -4,31 +4,28 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Enum\SchemaDetail;
+use App\Enum\SchemaMatchMode;
+use App\Exception\ToolUsageError;
+use App\Service\Schema\DriverSchemaInspectorInterface;
+use App\Service\Schema\SchemaInspectorFactory;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Schema\Index\IndexType;
-use Psr\Log\LoggerInterface;
+use Doctrine\DBAL\Schema\PrimaryKeyConstraint;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
 final class DatabaseSchemaService
 {
-    private const string DETAIL_SUMMARY = 'summary';
-    private const string DETAIL_COLUMNS = 'columns';
-    private const string DETAIL_FULL = 'full';
-
-    private const string MATCH_MODE_CONTAINS = 'contains';
-    private const string MATCH_MODE_PREFIX = 'prefix';
-    private const string MATCH_MODE_EXACT = 'exact';
-    private const string MATCH_MODE_GLOB = 'glob';
-
     public function __construct(
         private CacheInterface $cache,
-        private LoggerInterface $logger,
+        private SchemaInspectorFactory $schemaInspectorFactory,
     ) {
     }
 
     /** @return array<string, mixed> */
     public function getSchemaStructure(
+        string $connectionName,
         Connection $conn,
         string $engineName,
         string $filter,
@@ -37,20 +34,38 @@ final class DatabaseSchemaService
         bool $includeViews,
         bool $includeRoutines,
     ): array {
+        $normalizedDetail = $this->normalizeDetail($detail);
+        $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
+        $shouldIncludeViews = $includeViews;
+        $shouldIncludeRoutines = $includeRoutines;
+        $shouldIncludeDefinitions = SchemaDetail::FULL->value === $normalizedDetail;
+        $schemaInspector = $this->schemaInspectorFactory->create($conn);
+
         $cacheKey = \sprintf(
-            'database_schema_%s_%s_%s_%s_%d_%d',
-            md5(serialize($conn->getParams())),
+            'database_schema_%s_%s_%s_%s_%d_%d_%d',
+            md5($connectionName),
             md5($filter),
-            md5($detail),
-            md5($matchMode),
-            (int) $includeViews,
-            (int) $includeRoutines
+            md5($normalizedDetail),
+            md5($normalizedMatchMode),
+            (int) $shouldIncludeViews,
+            (int) $shouldIncludeRoutines,
+            (int) $shouldIncludeDefinitions,
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines) {
+        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
             $item->expiresAfter(60);
 
-            return $this->buildSchemaStructure($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines);
+            return $this->buildSchemaStructure(
+                $conn,
+                $engineName,
+                $schemaInspector,
+                $filter,
+                $normalizedDetail,
+                $normalizedMatchMode,
+                $shouldIncludeViews,
+                $shouldIncludeRoutines,
+                $shouldIncludeDefinitions,
+            );
         });
     }
 
@@ -72,9 +87,11 @@ final class DatabaseSchemaService
      */
     public function getRoutinesList(Connection $conn): array
     {
+        $schemaInspector = $this->schemaInspectorFactory->create($conn);
+
         return [
-            'stored_procedures' => $this->getStoredProcedures($conn),
-            'functions' => $this->getFunctions($conn),
+            'stored_procedures' => $schemaInspector->getStoredProcedures($conn),
+            'functions' => $schemaInspector->getFunctions($conn),
         ];
     }
 
@@ -82,11 +99,13 @@ final class DatabaseSchemaService
     private function buildSchemaStructure(
         Connection $conn,
         string $engineName,
+        DriverSchemaInspectorInterface $schemaInspector,
         string $filter,
         string $detail,
         string $matchMode,
         bool $includeViews,
         bool $includeRoutines,
+        bool $includeDefinitions,
     ): array {
         $normalizedDetail = $this->normalizeDetail($detail);
         $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
@@ -96,30 +115,50 @@ final class DatabaseSchemaService
             'detail' => $normalizedDetail,
             'match_mode' => $normalizedMatchMode,
             'tables' => match ($normalizedDetail) {
-                self::DETAIL_SUMMARY => $this->getAllTableNames($conn, $filter, $normalizedMatchMode),
-                self::DETAIL_COLUMNS => $this->getAllTableColumnsStructure($conn, $filter, $normalizedMatchMode),
-                default => $this->getAllTablesStructure($conn, $filter, $normalizedMatchMode),
+                SchemaDetail::SUMMARY->value => $this->getAllTableNames($conn, $filter, $normalizedMatchMode),
+                SchemaDetail::COLUMNS->value => $this->getAllTableColumnsStructure($conn, $filter, $normalizedMatchMode),
+                default => $this->getAllTablesStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions),
             },
         ];
 
         if ($includeViews) {
-            $result['views'] = self::DETAIL_FULL === $normalizedDetail
-                ? $this->getViewsStructure($conn, $filter, $normalizedMatchMode)
+            $result['views'] = SchemaDetail::FULL->value === $normalizedDetail
+                ? $this->getViewsStructure($conn, $filter, $normalizedMatchMode, $includeDefinitions)
                 : $this->getViewNames($conn, $filter, $normalizedMatchMode);
         }
 
         if ($includeRoutines) {
-            $result['routines'] = [
-                'stored_procedures' => self::DETAIL_FULL === $normalizedDetail
-                    ? $this->getStoredProceduresStructure($conn, $filter, $normalizedMatchMode)
-                    : $this->getStoredProceduresNames($conn, $filter, $normalizedMatchMode),
-                'functions' => self::DETAIL_FULL === $normalizedDetail
-                    ? $this->getFunctionsStructure($conn, $filter, $normalizedMatchMode)
-                    : $this->getFunctionsNames($conn, $filter, $normalizedMatchMode),
-                'sequences' => self::DETAIL_FULL === $normalizedDetail
+            $routines = [
+                'stored_procedures' => SchemaDetail::FULL->value === $normalizedDetail
+                    ? $this->getStoredProceduresStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions)
+                    : $this->getStoredProceduresNames($conn, $schemaInspector, $filter, $normalizedMatchMode),
+                'functions' => SchemaDetail::FULL->value === $normalizedDetail
+                    ? $this->getFunctionsStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions)
+                    : $this->getFunctionsNames($conn, $schemaInspector, $filter, $normalizedMatchMode),
+                'sequences' => SchemaDetail::FULL->value === $normalizedDetail
                     ? $this->getSequencesStructure($conn, $filter, $normalizedMatchMode)
                     : $this->getSequencesNames($conn, $filter, $normalizedMatchMode),
             ];
+
+            if (SchemaDetail::FULL->value !== $normalizedDetail) {
+                $routines['triggers'] = $this->getTriggersNames($conn, $schemaInspector, $filter, $normalizedMatchMode);
+            }
+
+            $result['routines'] = $routines;
+        }
+
+        if (
+            SchemaMatchMode::EXACT->value === $normalizedMatchMode
+            && '' !== trim($filter)
+            && !$this->hasAnySchemaMatches($result)
+        ) {
+            $result['diagnostics'] = $this->buildNoMatchDiagnostics(
+                $conn,
+                $schemaInspector,
+                $filter,
+                $includeViews,
+                $includeRoutines,
+            );
         }
 
         return $result;
@@ -128,17 +167,14 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getAllTablesStructure(Connection $conn, string $filter, string $matchMode): array
+    private function getAllTablesStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $schemaManager = $conn->createSchemaManager();
         $structures = [];
 
         foreach ($schemaManager->introspectTables() as $table) {
             $tableName = $table->getObjectName()->toString();
-
-            if (!$this->matchesFilter($tableName, $filter, $matchMode)) {
-                continue;
-            }
+            $tableNameMatchesFilter = $this->matchesFilter($tableName, $filter, $matchMode);
 
             $columns = [];
             foreach ($table->getColumns() as $column) {
@@ -156,20 +192,24 @@ final class DatabaseSchemaService
                     $detail['comment'] = $comment;
                 }
 
-                $columns[$column->getName()] = $detail;
+                $columns[$this->unquoteIdentifier($column->getObjectName()->toString())] = $detail;
             }
+
+            $primaryKey = $table->getPrimaryKeyConstraint();
 
             $indexes = [];
             foreach ($table->getIndexes() as $index) {
                 $indexName = $index->getObjectName()->toString();
                 $indexType = $index->getType();
+                $indexedColumns = array_map(
+                    static fn ($col) => $col->getColumnName()->toString(),
+                    $index->getIndexedColumns()
+                );
+
                 $indexes[$indexName] = [
-                    'columns' => array_map(
-                        static fn ($col) => $col->getColumnName()->toString(),
-                        $index->getIndexedColumns()
-                    ),
+                    'columns' => $indexedColumns,
                     'is_unique' => IndexType::UNIQUE === $indexType,
-                    'is_primary' => $index->isPrimary(),
+                    'is_primary' => $this->isPrimaryIndex($indexedColumns, $primaryKey),
                 ];
             }
 
@@ -192,13 +232,27 @@ final class DatabaseSchemaService
             // getObjectName()->toString() may return a quoted identifier like "users"
             // Strip surrounding quotes for use in raw SQL queries
             $rawTableName = trim($tableName, '"\' ');
+            $tableTriggers = $schemaInspector->getTableTriggers($conn, $rawTableName);
+            $matchingTriggers = $this->filterTableTriggers($tableTriggers, $filter, $matchMode);
+
+            if (!$tableNameMatchesFilter && '' !== trim($filter) && [] === $matchingTriggers) {
+                continue;
+            }
+
+            $triggersToReturn = $tableNameMatchesFilter || '' === trim($filter)
+                ? $tableTriggers
+                : $matchingTriggers;
+
+            if ($includeDefinitions) {
+                $triggersToReturn = $this->enrichTriggersWithDefinitions($conn, $schemaInspector, $triggersToReturn);
+            }
 
             $structures[$tableName] = [
                 'columns' => $columns,
                 'indexes' => $indexes,
                 'foreign_keys' => $foreignKeys,
-                'triggers' => $this->getTableTriggers($conn, $rawTableName),
-                'check_constraints' => $this->getTableCheckConstraints($conn, $rawTableName),
+                'triggers' => $triggersToReturn,
+                'check_constraints' => $schemaInspector->getTableCheckConstraints($conn, $rawTableName),
             ];
         }
 
@@ -238,7 +292,7 @@ final class DatabaseSchemaService
             foreach ($table->getColumns() as $column) {
                 $typeClass = \get_class($column->getType());
                 $typeParts = explode('\\', $typeClass);
-                $columns[$column->getName()] = str_replace('Type', '', end($typeParts));
+                $columns[$this->unquoteIdentifier($column->getObjectName()->toString())] = str_replace('Type', '', end($typeParts));
             }
 
             $tables[$tableName] = [
@@ -252,7 +306,7 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getViewsStructure(Connection $conn, string $filter, string $matchMode): array
+    private function getViewsStructure(Connection $conn, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $views = [];
 
@@ -263,9 +317,11 @@ final class DatabaseSchemaService
                 continue;
             }
 
-            $views[$viewName] = [
-                'sql' => $view->getSql(),
-            ];
+            $views[$viewName] = ['type' => 'view'];
+
+            if ($includeDefinitions) {
+                $views[$viewName]['definition'] = $view->getSql();
+            }
         }
 
         return $views;
@@ -289,74 +345,38 @@ final class DatabaseSchemaService
     }
 
     /**
-     * @return list<string>
-     */
-    private function getStoredProcedures(Connection $conn): array
-    {
-        $driver = $this->detectDriver($conn);
-
-        try {
-            if (str_contains($driver, 'mysql') || str_contains($driver, 'mariadb')) {
-                $stmt = $conn->executeQuery('SHOW PROCEDURE STATUS WHERE Db = DATABASE()');
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['Name'], $rows);
-            }
-            if (str_contains($driver, 'postgres')) {
-                $stmt = $conn->executeQuery("
-                    SELECT p.proname AS routine_name
-                    FROM pg_proc p
-                    JOIN pg_namespace n ON p.pronamespace = n.oid
-                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-                    AND p.prokind = 'p'
-                ");
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['routine_name'], $rows);
-            }
-            if (str_contains($driver, 'sqlite')) {
-                return [];
-            }
-            if (str_contains($driver, 'sqlsrv') || str_contains($driver, 'sqlserver')) {
-                $stmt = $conn->executeQuery('
-                    SELECT name
-                    FROM sys.procedures
-                    WHERE is_ms_shipped = 0
-                ');
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['name'], $rows);
-            }
-        } catch (\Exception $e) {
-            $this->logger->warning('Failed to get stored procedures', ['error' => $e->getMessage()]);
-        }
-
-        return [];
-    }
-
-    /**
      * @return array<string, array<string, mixed>>
      */
-    private function getStoredProceduresStructure(Connection $conn, string $filter, string $matchMode): array
+    private function getStoredProceduresStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $structures = [];
 
-        foreach ($this->getStoredProcedures($conn) as $proc) {
+        foreach ($schemaInspector->getStoredProcedures($conn) as $proc) {
             if (!$this->matchesFilter($proc, $filter, $matchMode)) {
                 continue;
             }
-            $structures[$proc] = ['type' => 'procedure'];
+
+            $details = ['type' => 'procedure'];
+
+            if ($includeDefinitions) {
+                $definition = $schemaInspector->getStoredProcedureDefinition($conn, $proc);
+                if (null !== $definition && '' !== trim($definition)) {
+                    $details['definition'] = $definition;
+                }
+            }
+
+            $structures[$proc] = $details;
         }
 
         return $structures;
     }
 
     /** @return list<string> */
-    private function getStoredProceduresNames(Connection $conn, string $filter, string $matchMode): array
+    private function getStoredProceduresNames(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
     {
         $names = [];
 
-        foreach ($this->getStoredProcedures($conn) as $procedureName) {
+        foreach ($schemaInspector->getStoredProcedures($conn) as $procedureName) {
             if (!$this->matchesFilter($procedureName, $filter, $matchMode)) {
                 continue;
             }
@@ -368,79 +388,59 @@ final class DatabaseSchemaService
     }
 
     /**
-     * @return list<string>
-     */
-    private function getFunctions(Connection $conn): array
-    {
-        $driver = $this->detectDriver($conn);
-
-        try {
-            if (str_contains($driver, 'mysql') || str_contains($driver, 'mariadb')) {
-                $stmt = $conn->executeQuery('SHOW FUNCTION STATUS WHERE Db = DATABASE()');
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['Name'], $rows);
-            }
-            if (str_contains($driver, 'postgres')) {
-                $stmt = $conn->executeQuery("
-                    SELECT p.proname AS routine_name
-                    FROM pg_proc p
-                    JOIN pg_namespace n ON p.pronamespace = n.oid
-                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-                    AND p.prokind = 'f'
-                ");
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['routine_name'], $rows);
-            }
-            if (str_contains($driver, 'sqlite')) {
-                return [];
-            }
-            if (str_contains($driver, 'sqlsrv') || str_contains($driver, 'sqlserver')) {
-                $stmt = $conn->executeQuery("
-                    SELECT name
-                    FROM sys.objects
-                    WHERE type IN ('FN', 'IF', 'TF') AND is_ms_shipped = 0
-                ");
-                $rows = $stmt->fetchAllAssociative();
-
-                return array_map(static fn ($row) => $row['name'], $rows);
-            }
-        } catch (\Exception $e) {
-            $this->logger->warning('Failed to get functions', ['error' => $e->getMessage()]);
-        }
-
-        return [];
-    }
-
-    /**
      * @return array<string, array<string, mixed>>
      */
-    private function getFunctionsStructure(Connection $conn, string $filter, string $matchMode): array
+    private function getFunctionsStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $structures = [];
 
-        foreach ($this->getFunctions($conn) as $func) {
+        foreach ($schemaInspector->getFunctions($conn) as $func) {
             if (!$this->matchesFilter($func, $filter, $matchMode)) {
                 continue;
             }
-            $structures[$func] = ['type' => 'function'];
+
+            $details = ['type' => 'function'];
+
+            if ($includeDefinitions) {
+                $definition = $schemaInspector->getFunctionDefinition($conn, $func);
+                if (null !== $definition && '' !== trim($definition)) {
+                    $details['definition'] = $definition;
+                }
+            }
+
+            $structures[$func] = $details;
         }
 
         return $structures;
     }
 
     /** @return list<string> */
-    private function getFunctionsNames(Connection $conn, string $filter, string $matchMode): array
+    private function getFunctionsNames(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
     {
         $names = [];
 
-        foreach ($this->getFunctions($conn) as $functionName) {
+        foreach ($schemaInspector->getFunctions($conn) as $functionName) {
             if (!$this->matchesFilter($functionName, $filter, $matchMode)) {
                 continue;
             }
 
             $names[] = $functionName;
+        }
+
+        return $names;
+    }
+
+    /** @return list<string> */
+    private function getTriggersNames(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
+    {
+        $names = [];
+
+        foreach ($schemaInspector->getTriggers($conn) as $triggerName) {
+            if (!$this->matchesFilter($triggerName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $names[] = $triggerName;
         }
 
         return $names;
@@ -495,137 +495,24 @@ final class DatabaseSchemaService
         return $names;
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function getTableTriggers(Connection $conn, string $tableName): array
-    {
-        $driver = $this->detectDriver($conn);
-
-        try {
-            if (str_contains($driver, 'mysql') || str_contains($driver, 'mariadb')) {
-                $stmt = $conn->executeQuery(
-                    'SELECT TRIGGER_NAME AS name, EVENT_MANIPULATION AS event, ACTION_TIMING AS timing, ACTION_STATEMENT AS statement
-                     FROM information_schema.TRIGGERS
-                     WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = ?',
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-            if (str_contains($driver, 'postgres')) {
-                $stmt = $conn->executeQuery(
-                    'SELECT trigger_name AS name, event_manipulation AS event, action_timing AS timing, action_statement AS statement
-                     FROM information_schema.triggers
-                     WHERE trigger_schema = current_schema() AND event_object_table = ?',
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-            if (str_contains($driver, 'sqlite')) {
-                $stmt = $conn->executeQuery(
-                    "SELECT name, sql AS statement FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?",
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-            if (str_contains($driver, 'sqlsrv') || str_contains($driver, 'sqlserver')) {
-                $stmt = $conn->executeQuery(
-                    'SELECT t.name, te.type_desc AS event
-                     FROM sys.triggers t
-                     JOIN sys.trigger_events te ON t.object_id = te.object_id
-                     JOIN sys.tables tbl ON t.parent_id = tbl.object_id
-                     WHERE tbl.name = ?',
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-        } catch (\Exception $e) {
-            $this->logger->warning('Failed to get triggers', ['table' => $tableName, 'error' => $e->getMessage()]);
-        }
-
-        return [];
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function getTableCheckConstraints(Connection $conn, string $tableName): array
-    {
-        $driver = $this->detectDriver($conn);
-
-        try {
-            if (str_contains($driver, 'mysql') || str_contains($driver, 'mariadb')) {
-                $stmt = $conn->executeQuery(
-                    'SELECT cc.CONSTRAINT_NAME AS name, cc.CHECK_CLAUSE AS definition
-                     FROM information_schema.CHECK_CONSTRAINTS cc
-                     JOIN information_schema.TABLE_CONSTRAINTS tc
-                         ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
-                         AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-                     WHERE tc.CONSTRAINT_TYPE = \'CHECK\'
-                       AND tc.CONSTRAINT_SCHEMA = DATABASE()
-                       AND tc.TABLE_NAME = ?',
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-            if (str_contains($driver, 'postgres')) {
-                $stmt = $conn->executeQuery(
-                    "SELECT conname AS name, pg_get_constraintdef(oid) AS definition
-                     FROM pg_constraint
-                     WHERE contype = 'c' AND conrelid = ?::regclass",
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-            if (str_contains($driver, 'sqlite')) {
-                return [];
-            }
-            if (str_contains($driver, 'sqlsrv') || str_contains($driver, 'sqlserver')) {
-                $stmt = $conn->executeQuery(
-                    'SELECT cc.name, cc.definition
-                     FROM sys.check_constraints cc
-                     JOIN sys.tables t ON cc.parent_object_id = t.object_id
-                     WHERE t.name = ?',
-                    [$tableName]
-                );
-
-                return $stmt->fetchAllAssociative();
-            }
-        } catch (\Exception $e) {
-            $this->logger->warning('Failed to get check constraints', ['table' => $tableName, 'error' => $e->getMessage()]);
-        }
-
-        return [];
-    }
-
     private function normalizeDetail(string $detail): string
     {
-        $normalized = strtolower(trim($detail));
+        $detailEnum = SchemaDetail::tryFromInput($detail);
+        if (null === $detailEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid detail value "%s".', $detail), hint: \sprintf('Use one of: %s.', implode(', ', SchemaDetail::values())), retryable: false);
+        }
 
-        return match ($normalized) {
-            self::DETAIL_FULL => self::DETAIL_FULL,
-            self::DETAIL_COLUMNS => self::DETAIL_COLUMNS,
-            default => self::DETAIL_SUMMARY,
-        };
+        return $detailEnum->value;
     }
 
     private function normalizeMatchMode(string $matchMode): string
     {
-        $normalized = strtolower(trim($matchMode));
+        $modeEnum = SchemaMatchMode::tryFromInput($matchMode);
+        if (null === $modeEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid matchMode value "%s".', $matchMode), hint: \sprintf('Use one of: %s.', implode(', ', SchemaMatchMode::values())), retryable: false);
+        }
 
-        return match ($normalized) {
-            self::MATCH_MODE_PREFIX,
-            self::MATCH_MODE_EXACT,
-            self::MATCH_MODE_GLOB,
-            self::MATCH_MODE_CONTAINS => $normalized,
-            default => self::MATCH_MODE_CONTAINS,
-        };
+        return $modeEnum->value;
     }
 
     private function matchesFilter(string $objectName, string $filter, string $matchMode): bool
@@ -634,22 +521,327 @@ final class DatabaseSchemaService
             return true;
         }
 
-        $normalizedName = strtolower(trim($objectName, '"\' '));
-        $normalizedFilter = strtolower(trim($filter));
+        $normalizedName = $this->normalizeFilterTarget($objectName);
+        $normalizedFilter = $this->normalizeFilterTarget($filter);
         $normalizedMode = $this->normalizeMatchMode($matchMode);
 
         return match ($normalizedMode) {
-            self::MATCH_MODE_PREFIX => str_starts_with($normalizedName, $normalizedFilter),
-            self::MATCH_MODE_EXACT => $normalizedName === $normalizedFilter,
-            self::MATCH_MODE_GLOB => fnmatch($normalizedFilter, $normalizedName),
-            default => str_contains($normalizedName, $normalizedFilter),
+            SchemaMatchMode::PREFIX->value => $this->matchesPrefix($normalizedName, $normalizedFilter),
+            SchemaMatchMode::EXACT->value => $this->matchesExact($normalizedName, $normalizedFilter),
+            SchemaMatchMode::GLOB->value => $this->matchesGlob($normalizedName, $normalizedFilter),
+            default => $this->matchesContains($normalizedName, $normalizedFilter),
         };
     }
 
-    private function detectDriver(Connection $conn): string
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesPrefix(array $name, array $filter): bool
     {
-        $driver = \get_class($conn->getDatabasePlatform());
+        return str_starts_with($name['canonical'], $filter['canonical'])
+            || str_starts_with($name['leaf'], $filter['leaf']);
+    }
 
-        return strtolower(basename(str_replace('\\', '/', $driver)));
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesExact(array $name, array $filter): bool
+    {
+        return $name['canonical'] === $filter['canonical']
+            || $name['leaf'] === $filter['leaf'];
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesGlob(array $name, array $filter): bool
+    {
+        return fnmatch($filter['canonical'], $name['canonical'])
+            || fnmatch($filter['leaf'], $name['leaf']);
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesContains(array $name, array $filter): bool
+    {
+        return str_contains($name['canonical'], $filter['canonical'])
+            || str_contains($name['leaf'], $filter['leaf']);
+    }
+
+    /**
+     * @return array{canonical: string, leaf: string}
+     */
+    private function normalizeFilterTarget(string $value): array
+    {
+        $trimmedValue = trim($value);
+        $parts = preg_split('/\s*\.\s*/', $trimmedValue);
+        if (false === $parts || [] === $parts) {
+            $normalized = $this->normalizeIdentifier($trimmedValue);
+
+            return [
+                'canonical' => $normalized,
+                'leaf' => $normalized,
+            ];
+        }
+
+        $normalizedParts = [];
+        foreach ($parts as $part) {
+            $normalizedPart = $this->normalizeIdentifier($part);
+            if ('' === $normalizedPart) {
+                continue;
+            }
+
+            $normalizedParts[] = $normalizedPart;
+        }
+
+        if ([] === $normalizedParts) {
+            $normalized = $this->normalizeIdentifier($trimmedValue);
+
+            return [
+                'canonical' => $normalized,
+                'leaf' => $normalized,
+            ];
+        }
+
+        $canonical = implode('.', $normalizedParts);
+
+        return [
+            'canonical' => $canonical,
+            'leaf' => end($normalizedParts) ?: $canonical,
+        ];
+    }
+
+    /** @param array<string, mixed> $result */
+    private function hasAnySchemaMatches(array $result): bool
+    {
+        if (isset($result['tables']) && \is_array($result['tables']) && [] !== $result['tables']) {
+            return true;
+        }
+
+        if (isset($result['views']) && \is_array($result['views']) && [] !== $result['views']) {
+            return true;
+        }
+
+        if (!isset($result['routines']) || !\is_array($result['routines'])) {
+            return false;
+        }
+
+        foreach ($result['routines'] as $routineGroup) {
+            if (\is_array($routineGroup) && [] !== $routineGroup) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildNoMatchDiagnostics(
+        Connection $conn,
+        DriverSchemaInspectorInterface $schemaInspector,
+        string $filter,
+        bool $includeViews,
+        bool $includeRoutines,
+    ): array {
+        $normalizedFilter = $this->normalizeFilterTarget($filter);
+        $candidates = $this->collectSchemaCandidates($conn, $schemaInspector, $includeViews, $includeRoutines);
+
+        return [
+            'status' => 'no_exact_match',
+            'normalized_filter' => $normalizedFilter,
+            'normalized_names_tried' => array_values(array_unique([$normalizedFilter['canonical'], $normalizedFilter['leaf']])),
+            'top_near_matches' => $this->findTopNearMatches($normalizedFilter, $candidates),
+        ];
+    }
+
+    /**
+     * @return list<array{name: string, type: string, normalized: array{canonical: string, leaf: string}}>
+     */
+    private function collectSchemaCandidates(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, bool $includeViews, bool $includeRoutines): array
+    {
+        $candidates = [];
+
+        foreach ($conn->createSchemaManager()->introspectTables() as $table) {
+            $tableName = $table->getObjectName()->toString();
+            $candidates[] = [
+                'name' => $tableName,
+                'type' => 'table',
+                'normalized' => $this->normalizeFilterTarget($tableName),
+            ];
+        }
+
+        if ($includeViews) {
+            foreach ($conn->createSchemaManager()->introspectViews() as $view) {
+                $viewName = $view->getObjectName()->toString();
+                $candidates[] = [
+                    'name' => $viewName,
+                    'type' => 'view',
+                    'normalized' => $this->normalizeFilterTarget($viewName),
+                ];
+            }
+        }
+
+        if ($includeRoutines) {
+            foreach ($schemaInspector->getStoredProcedures($conn) as $procedureName) {
+                $candidates[] = [
+                    'name' => $procedureName,
+                    'type' => 'procedure',
+                    'normalized' => $this->normalizeFilterTarget($procedureName),
+                ];
+            }
+
+            foreach ($schemaInspector->getFunctions($conn) as $functionName) {
+                $candidates[] = [
+                    'name' => $functionName,
+                    'type' => 'function',
+                    'normalized' => $this->normalizeFilterTarget($functionName),
+                ];
+            }
+
+            foreach ($schemaInspector->getTriggers($conn) as $triggerName) {
+                $candidates[] = [
+                    'name' => $triggerName,
+                    'type' => 'trigger',
+                    'normalized' => $this->normalizeFilterTarget($triggerName),
+                ];
+            }
+
+            try {
+                foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+                    $sequenceName = $sequence->getObjectName()->toString();
+                    $candidates[] = [
+                        'name' => $sequenceName,
+                        'type' => 'sequence',
+                        'normalized' => $this->normalizeFilterTarget($sequenceName),
+                    ];
+                }
+            } catch (\Exception) {
+                // Platform might not support sequences.
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string}                                                      $normalizedFilter
+     * @param list<array{name: string, type: string, normalized: array{canonical: string, leaf: string}}> $candidates
+     *
+     * @return list<array{name: string, type: string, normalized_name: string}>
+     */
+    private function findTopNearMatches(array $normalizedFilter, array $candidates): array
+    {
+        $scored = [];
+
+        foreach ($candidates as $candidate) {
+            $score = min(
+                levenshtein($normalizedFilter['canonical'], $candidate['normalized']['canonical']),
+                levenshtein($normalizedFilter['leaf'], $candidate['normalized']['leaf']),
+            );
+
+            $scored[] = [
+                'name' => $candidate['name'],
+                'type' => $candidate['type'],
+                'normalized_name' => $candidate['normalized']['canonical'],
+                'score' => $score,
+            ];
+        }
+
+        usort(
+            $scored,
+            static fn (array $left, array $right): int => $left['score'] <=> $right['score']
+                ?: strcmp((string) $left['type'], (string) $right['type'])
+                ?: strcmp((string) $left['name'], (string) $right['name']),
+        );
+
+        $topMatches = \array_slice($scored, 0, 5);
+
+        return array_map(
+            static fn (array $match): array => [
+                'name' => (string) $match['name'],
+                'type' => (string) $match['type'],
+                'normalized_name' => (string) $match['normalized_name'],
+            ],
+            $topMatches,
+        );
+    }
+
+    /**
+     * @param list<string> $indexColumns
+     */
+    private function isPrimaryIndex(array $indexColumns, ?PrimaryKeyConstraint $primaryKey): bool
+    {
+        if (null === $primaryKey) {
+            return false;
+        }
+
+        $normalizedIndexColumns = array_map($this->normalizeIdentifier(...), $indexColumns);
+        sort($normalizedIndexColumns);
+
+        $primaryColumns = array_map(
+            fn ($columnName): string => $this->normalizeIdentifier($columnName->toString()),
+            $primaryKey->getColumnNames()
+        );
+        sort($primaryColumns);
+
+        return $normalizedIndexColumns === $primaryColumns;
+    }
+
+    private function normalizeIdentifier(string $identifier): string
+    {
+        return strtolower(trim($identifier, '"\'`[] '));
+    }
+
+    private function unquoteIdentifier(string $identifier): string
+    {
+        return trim($identifier, '"\'`[] ');
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $triggers
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterTableTriggers(array $triggers, string $filter, string $matchMode): array
+    {
+        if ('' === trim($filter)) {
+            return $triggers;
+        }
+
+        return array_values(array_filter(
+            $triggers,
+            fn (array $trigger): bool => $this->matchesFilter((string) ($trigger['name'] ?? ''), $filter, $matchMode),
+        ));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $triggers
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function enrichTriggersWithDefinitions(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, array $triggers): array
+    {
+        return array_map(static function (array $trigger) use ($conn, $schemaInspector): array {
+            $triggerName = $trigger['name'] ?? null;
+            if (!\is_string($triggerName) || '' === trim($triggerName)) {
+                return $trigger;
+            }
+
+            $definition = $schemaInspector->getTriggerDefinition($conn, $triggerName);
+            if (null === $definition || '' === trim($definition)) {
+                return $trigger;
+            }
+
+            $trigger['definition'] = $definition;
+
+            return $trigger;
+        }, $triggers);
     }
 }

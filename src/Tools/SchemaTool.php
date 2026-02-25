@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tools;
 
+use App\Enum\SchemaDetail;
+use App\Enum\SchemaMatchMode;
 use App\Exception\ToolUsageError;
 use App\Service\DatabaseSchemaService;
 use App\Service\DoctrineConfigLoader;
@@ -17,56 +19,56 @@ final class SchemaTool
 {
     public const string NAME = 'schema';
     public const string TITLE = 'Database Schema structure';
-    public const string DETAIL_SUMMARY = 'summary';
-    public const string DETAIL_COLUMNS = 'columns';
-    public const string DETAIL_FULL = 'full';
-    public const string MATCH_MODE_CONTAINS = 'contains';
-    public const string MATCH_MODE_PREFIX = 'prefix';
-    public const string MATCH_MODE_EXACT = 'exact';
-    public const string MATCH_MODE_GLOB = 'glob';
 
     public const string DESCRIPTION = <<<DESCRIPTION
 Inspect schema for a database connection.
 
-Use detail="summary" (default) to list matching object names.
-Use detail="columns" to list matching tables with column types.
-Use detail="full" to return full structures (columns, indexes, foreign keys, triggers, check constraints).
+Use database_schema(detail="full", includeRoutines=true) as the default way to fetch
+trigger/function/procedure/view definitions. Prefer this over raw
+information_schema/system catalog queries.
+
+Detail levels:
+- summary (default): matching table names.
+- columns: matching tables with column types.
+- full: full table structures (columns, indexes, foreign keys, triggers, check constraints).
+
+Object coverage:
+- tables: columns/indexes/foreign keys/check constraints/triggers (with trigger definitions in full detail).
+- views: SQL definitions when includeViews=true.
+- routines: function/procedure definitions when includeRoutines=true and detail="full".
+
+Include flags:
+- includeViews=true adds view names for summary/columns.
+- includeRoutines=true adds stored_procedures, functions, sequences, and trigger names for summary/columns.
+- Triggers are included under each table for detail="full" and are not duplicated under routines.
+
+Definition preference:
+- If output already includes a definition field, do not re-query raw catalogs/system tables.
+
+Usage guidance:
+- detail="full" and detail="columns" should be used with a narrow filter whenever possible.
+- Large full/columns outputs are rejected with ToolUsageError; refine filter or use summary.
 
 Filter note:
-- filter is required and matches object names (tables, views, procedures, functions, sequences).
-- Use filter="" to include all object names.
+- filter is optional and matches object names (tables, views, procedures, functions, sequences, triggers).
+- In detail="full", matching routine/view/trigger objects include their definitions in output.
+- Omit filter (or use filter="") to include all object names.
 
-Recommended flow:
-1. Call with detail="summary" and empty filter to discover names.
-2. Call with detail="columns" to inspect column names and types.
-3. Call again with a refined filter and detail="full" for exact structure.
+Examples:
+- Get trigger function body by name:
+  connection="users", filter="trg_users_insert_fn", detail="full", includeRoutines=true
+- Get view SQL by view name:
+  connection="users", filter="my_view", detail="full", includeViews=true
+- Get all routines in schema prefix:
+  connection="users", filter="public.", matchMode="prefix", detail="full", includeRoutines=true
 
 Routine note:
-- includeRoutines=true returns stored_procedures, functions, and sequences.
 - In PostgreSQL, many routines are exposed as functions (not procedures).
-
-Metadata note:
-- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.
 
 If detail="columns" or detail="full" output is too large, the tool returns ToolUsageError and asks for a narrower filter.
 DESCRIPTION;
 
-    private const int MAX_OUTPUT_TOKENS = 2500;
-
-    /** @var list<string> */
-    private const array ALLOWED_DETAILS = [
-        self::DETAIL_SUMMARY,
-        self::DETAIL_COLUMNS,
-        self::DETAIL_FULL,
-    ];
-
-    /** @var list<string> */
-    private const array ALLOWED_MATCH_MODES = [
-        self::MATCH_MODE_CONTAINS,
-        self::MATCH_MODE_PREFIX,
-        self::MATCH_MODE_EXACT,
-        self::MATCH_MODE_GLOB,
-    ];
+    private const int MAX_OUTPUT_TOKENS = 2000;
 
     public function __construct(
         private DatabaseSchemaService $databaseSchemaService,
@@ -77,17 +79,17 @@ DESCRIPTION;
 
     /**
      * @param string $connection      Connection name
-     * @param string $filter          Required object-name filter; empty string means all
-     * @param string $detail          Schema detail level: summary, columns, or full
+     * @param string $filter          Optional object-name filter; empty string means all
+     * @param string $detail          Schema detail level: summary (names), columns (types), or full (full structures)
      * @param string $matchMode       Filter matching mode: contains, prefix, exact, glob
      * @param bool   $includeViews    Include views in response
-     * @param bool   $includeRoutines Include procedures, functions, and sequences in response
+     * @param bool   $includeRoutines Include procedures/functions/sequences and trigger names in routines output
      */
     public function __invoke(
         string $connection,
-        string $filter,
-        string $detail = self::DETAIL_SUMMARY,
-        string $matchMode = self::MATCH_MODE_CONTAINS,
+        string $filter = '',
+        string $detail = SchemaDetail::SUMMARY->value,
+        string $matchMode = SchemaMatchMode::CONTAINS->value,
         bool $includeViews = false,
         bool $includeRoutines = false,
     ): CallToolResult {
@@ -98,6 +100,7 @@ DESCRIPTION;
             $conn = $this->doctrineConfigLoader->getConnection($connection);
 
             $schema = $this->databaseSchemaService->getSchemaStructure(
+                $connection,
                 $conn,
                 $this->doctrineConfigLoader->getConnectionType($connection) ?? 'unknown',
                 $filter,
@@ -109,11 +112,14 @@ DESCRIPTION;
 
             $encodedSchema = Toon::encode($schema);
 
-            if (self::DETAIL_SUMMARY !== $detail) {
+            if (
+                SchemaDetail::COLUMNS->value === $detail
+                || SchemaDetail::FULL->value === $detail
+            ) {
                 $estimatedTokens = $this->estimateTokenCount($encodedSchema);
 
-                if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS && !$this->isSingleTableResult($schema)) {
-                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter or switch to detail="summary". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
+                if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS) {
+                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter (recommended for detail="columns"/"full") or switch to detail="summary". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
                 }
             }
 
@@ -178,34 +184,22 @@ DESCRIPTION;
 
     private function normalizeDetail(string $detail): string
     {
-        $normalized = strtolower(trim($detail));
-
-        if (!\in_array($normalized, self::ALLOWED_DETAILS, true)) {
-            throw new ToolUsageError(message: \sprintf('Invalid detail value "%s".', $detail), hint: 'Use detail="summary", detail="columns", or detail="full".', retryable: false);
+        $detailEnum = SchemaDetail::tryFromInput($detail);
+        if (null === $detailEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid detail value "%s".', $detail), hint: \sprintf('Use one of: %s.', implode(', ', SchemaDetail::values())), retryable: false);
         }
 
-        return $normalized;
+        return $detailEnum->value;
     }
 
     private function normalizeMatchMode(string $matchMode): string
     {
-        $normalized = strtolower(trim($matchMode));
-
-        if (!\in_array($normalized, self::ALLOWED_MATCH_MODES, true)) {
-            throw new ToolUsageError(message: \sprintf('Invalid matchMode value "%s".', $matchMode), hint: 'Use one of: contains, prefix, exact, glob.', retryable: false);
+        $matchModeEnum = SchemaMatchMode::tryFromInput($matchMode);
+        if (null === $matchModeEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid matchMode value "%s".', $matchMode), hint: \sprintf('Use one of: %s.', implode(', ', SchemaMatchMode::values())), retryable: false);
         }
 
-        return $normalized;
-    }
-
-    /** @param array<string, mixed> $schema */
-    private function isSingleTableResult(array $schema): bool
-    {
-        if (!isset($schema['tables']) || !\is_array($schema['tables'])) {
-            return false;
-        }
-
-        return 1 === \count($schema['tables']);
+        return $matchModeEnum->value;
     }
 
     private function estimateTokenCount(string $payload): int

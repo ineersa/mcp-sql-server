@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Exception\ToolUsageError;
 use App\Service\DatabaseSchemaService;
+use App\Service\Schema\MysqlSchemaInspector;
+use App\Service\Schema\PostgreSqlSchemaInspector;
+use App\Service\Schema\SchemaInspectorFactory;
+use App\Service\Schema\SqliteSchemaInspector;
+use App\Service\Schema\SqlServerSchemaInspector;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -28,13 +34,24 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->connection->executeStatement('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)');
         $this->connection->executeStatement('CREATE TABLE user_profiles (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL)');
         $this->connection->executeStatement('CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL)');
+        $this->connection->executeStatement('CREATE VIEW active_users AS SELECT id, email FROM users');
+        $this->connection->executeStatement('CREATE TRIGGER trg_users_insert AFTER INSERT ON users BEGIN SELECT 1; END');
 
-        $this->service = new DatabaseSchemaService(new ArrayAdapter(), new NullLogger());
+        $logger = new NullLogger();
+        $schemaInspectorFactory = new SchemaInspectorFactory(
+            new MysqlSchemaInspector($logger),
+            new PostgreSqlSchemaInspector($logger),
+            new SqliteSchemaInspector($logger),
+            new SqlServerSchemaInspector($logger),
+        );
+
+        $this->service = new DatabaseSchemaService(new ArrayAdapter(), $schemaInspectorFactory);
     }
 
     public function testSummaryDetailReturnsOnlyMatchingTableNames(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'user',
@@ -51,6 +68,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testExactMatchModeReturnsSingleExactName(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -66,6 +84,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testGlobMatchModeSupportsWildcards(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'user*',
@@ -81,6 +100,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testColumnsDetailReturnsColumnTypesWithoutFullMetadata(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -106,6 +126,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testFullDetailReturnsStructuredTableData(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -124,6 +145,261 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->assertArrayHasKey('columns', $table);
         $this->assertArrayHasKey('indexes', $table);
         $this->assertArrayHasKey('foreign_keys', $table);
+        $this->assertArrayNotHasKey('views', $result);
+        $this->assertArrayNotHasKey('routines', $result);
+    }
+
+    public function testFullDetailDoesNotAutomaticallyIncludeViewsAndRoutines(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            '',
+            'full',
+            'contains',
+            false,
+            false,
+        );
+
+        $this->assertArrayNotHasKey('views', $result);
+        $this->assertArrayNotHasKey('routines', $result);
+    }
+
+    public function testIncludeRoutinesAddsTriggersForSummaryDetail(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'summary',
+            'contains',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertIsArray($result['routines']);
+        $this->assertArrayHasKey('triggers', $result['routines']);
+        $this->assertContains('trg_users_insert', $result['routines']['triggers']);
+    }
+
+    public function testFullDetailDoesNotDuplicateTriggersUnderRoutines(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'full',
+            'contains',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertIsArray($result['routines']);
+        $this->assertArrayNotHasKey('triggers', $result['routines']);
+
+        $table = reset($result['tables']);
+        $this->assertIsArray($table);
+        $this->assertArrayHasKey('triggers', $table);
+        $this->assertNotEmpty($table['triggers']);
+    }
+
+    public function testFullDetailCanFilterByTriggerName(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'trg_users_insert',
+            'full',
+            'exact',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('tables', $result);
+        $this->assertIsArray($result['tables']);
+        $this->assertCount(1, $result['tables']);
+
+        $tableName = array_key_first($result['tables']);
+        $this->assertIsString($tableName);
+        $this->assertSame('users', trim($tableName, '"\' '));
+
+        $table = reset($result['tables']);
+        $this->assertIsArray($table);
+        $this->assertArrayHasKey('triggers', $table);
+        $this->assertCount(1, $table['triggers']);
+        $this->assertSame('trg_users_insert', $table['triggers'][0]['name']);
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertArrayNotHasKey('triggers', $result['routines']);
+    }
+
+    public function testFullDetailIncludesTriggerDefinitionsByDefault(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'trg_users_insert',
+            'full',
+            'exact',
+            false,
+            true,
+        );
+
+        $table = reset($result['tables']);
+        $this->assertIsArray($table);
+        $this->assertArrayHasKey('triggers', $table);
+        $this->assertIsArray($table['triggers']);
+        $this->assertCount(1, $table['triggers']);
+        $this->assertArrayHasKey('definition', $table['triggers'][0]);
+        $this->assertIsString($table['triggers'][0]['definition']);
+        $this->assertStringContainsStringIgnoringCase('create trigger', $table['triggers'][0]['definition']);
+    }
+
+    public function testFullDetailIncludesViewDefinitionsByDefault(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'active_users',
+            'full',
+            'exact',
+            true,
+            false,
+        );
+
+        $this->assertArrayHasKey('views', $result);
+        $this->assertIsArray($result['views']);
+        $this->assertCount(1, $result['views']);
+
+        $view = reset($result['views']);
+        $this->assertIsArray($view);
+        $this->assertArrayHasKey('type', $view);
+        $this->assertSame('view', $view['type']);
+        $this->assertArrayHasKey('definition', $view);
+        $this->assertIsString($view['definition']);
+        $this->assertStringContainsStringIgnoringCase('select', $view['definition']);
+    }
+
+    public function testExactMatchModeHandlesQuotedViewFilter(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            '"active_users"',
+            'full',
+            'exact',
+            true,
+            false,
+        );
+
+        $this->assertArrayHasKey('views', $result);
+        $this->assertCount(1, $result['views']);
+        $this->assertArrayHasKey('active_users', $this->normalizeObjectMapKeys($result['views']));
+    }
+
+    public function testExactMatchModeHandlesSchemaQualifiedViewFilter(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'main.active_users',
+            'full',
+            'exact',
+            true,
+            false,
+        );
+
+        $this->assertArrayHasKey('views', $result);
+        $this->assertCount(1, $result['views']);
+        $this->assertArrayHasKey('active_users', $this->normalizeObjectMapKeys($result['views']));
+    }
+
+    public function testExactMatchModeHandlesQuotedTriggerFilter(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            '"trg_users_insert"',
+            'summary',
+            'exact',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertContains('trg_users_insert', $result['routines']['triggers']);
+    }
+
+    public function testExactNoMatchIncludesDiagnosticsWithNearMatches(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'active_userz',
+            'summary',
+            'exact',
+            true,
+            true,
+        );
+
+        $this->assertArrayHasKey('diagnostics', $result);
+        $this->assertSame('no_exact_match', $result['diagnostics']['status']);
+        $this->assertSame('active_userz', $result['diagnostics']['normalized_filter']['canonical']);
+        $this->assertContains('active_userz', $result['diagnostics']['normalized_names_tried']);
+        $this->assertIsArray($result['diagnostics']['top_near_matches']);
+        $this->assertNotEmpty($result['diagnostics']['top_near_matches']);
+
+        $normalizedNearMatchNames = array_map(
+            static fn (array $match): string => (string) ($match['normalized_name'] ?? ''),
+            $result['diagnostics']['top_near_matches'],
+        );
+
+        $this->assertContains('active_users', $normalizedNearMatchNames);
+    }
+
+    public function testInvalidDetailThrowsToolUsageError(): void
+    {
+        $this->expectException(ToolUsageError::class);
+        $this->expectExceptionMessage('Invalid detail value');
+
+        $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'invalid-detail',
+            'contains',
+            false,
+            false,
+        );
+    }
+
+    public function testInvalidMatchModeThrowsToolUsageError(): void
+    {
+        $this->expectException(ToolUsageError::class);
+        $this->expectExceptionMessage('Invalid matchMode value');
+
+        $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'summary',
+            'invalid-mode',
+            false,
+            false,
+        );
     }
 
     /**
@@ -137,6 +413,21 @@ final class DatabaseSchemaServiceTest extends TestCase
 
         foreach ($objects as $objectName) {
             $normalized[] = trim((string) $objectName, '"\' ');
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeObjectMapKeys(mixed $objects): array
+    {
+        $this->assertIsArray($objects);
+
+        $normalized = [];
+        foreach ($objects as $objectName => $objectData) {
+            $normalized[trim((string) $objectName, '"\' ')] = $objectData;
         }
 
         return $normalized;

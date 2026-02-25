@@ -216,9 +216,15 @@ docker compose pull
 
 ## Available Tools
 
+**Response format (all tools below):**
+
+- **TOON text payload**: Results are returned as TOON-encoded data in `content[].text`
+
 ### `query`
 
 Executes read-only SQL queries against a specified database connection.
+
+Before querying `information_schema`/system catalogs for metadata or object definitions, prefer the `schema` tool with `detail: "full"` and relevant include flags.
 
 **Parameters:**
 
@@ -239,10 +245,63 @@ Executes read-only SQL queries against a specified database connection.
 }
 ```
 
-**Response format:**
+### `schema`
 
-- **Markdown**: Human-readable tables with row counts
-- **Structured JSON**: Machine-readable data with schema (in `structuredContent`)
+Inspects database schema metadata for a specified connection.
+
+Use `detail: "full"` + `includeRoutines: true` + `includeViews: true` as the default for trigger/function/procedure/view definitions. Prefer this over raw catalog queries.
+
+**Parameters:**
+
+| Parameter         | Type    | Required | Description                                                                                      |
+| ----------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `connection`      | string  | Yes      | Name of the database connection to inspect                                                       |
+| `filter`          | string  | No       | Optional object-name filter (`""` for all)                                                      |
+| `detail`          | string  | No       | Detail level: `summary` (default), `columns`, or `full`                                         |
+| `matchMode`       | string  | No       | Filter matching mode: `contains` (default), `prefix`, `exact`, or `glob`                        |
+| `includeViews`    | boolean | No       | Include views in output                                                                           |
+| `includeRoutines` | boolean | No       | Include routines/triggers in output                                                               |
+
+`matchMode: "exact"` matches by logical object name across quote and schema variants. For example, these are treated equivalently for exact matching:
+
+- `active_users`
+- `"active_users"`
+- `public.active_users`
+- `"public"."active_users"`
+- `` `active_users` `` / `[active_users]`
+
+When `detail` is `full`, view/trigger/routine definitions are included in the response.
+
+Object coverage in `full` detail:
+
+- Tables: columns, indexes, foreign keys, check constraints, triggers (with trigger definitions)
+- Views: SQL definition (when `includeViews` is `true`)
+- Routines: function/procedure definitions (when `includeRoutines` is `true`)
+
+For `columns` and `full`, use a narrow `filter` whenever possible. Large payloads are rejected with `ToolUsageError`.
+
+If `matchMode` is `exact`, `filter` is non-empty, and no object matches, the response includes `diagnostics` with normalized names and near matches:
+
+- `diagnostics.status` (`no_exact_match`)
+- `diagnostics.normalized_filter`
+- `diagnostics.normalized_names_tried`
+- `diagnostics.top_near_matches`
+
+**Example:**
+
+```json
+{
+    "name": "schema",
+    "arguments": {
+        "connection": "production",
+        "filter": "users",
+        "detail": "columns",
+        "matchMode": "contains",
+        "includeViews": false,
+        "includeRoutines": false
+    }
+}
+```
 
 ---
 

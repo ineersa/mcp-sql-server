@@ -2,7 +2,7 @@
     "tools": [
         {
             "name": "query",
-            "description": "Runs read-only SQL queries against chosen database connection.\nOnly SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.\n\nSTART HERE - REQUIRED DISCOVERY FLOW:\n- Before writing SQL, read db://{connection} to list available tables for the target connection.\n- Then read db://{connection}/{table} for the exact schema of tables you plan to query.\n- This avoids \"table not found\" and wrong-column errors.\n\nCRITICAL - ROW LIMIT:\n- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.\n- MySQL/PostgreSQL/SQLite: Use LIMIT 10\n- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)\n\nRULES:\n1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.\n2. Check the connection type before writing the query - use correct syntax for that database.\n3. For more rows, use pagination with OFFSET.\n4. Large text columns (>200 chars) are truncated to \"<TEXT>\" in multi-row results. To view full text, Query MUST return exactly 1 row.\n\nExamples:\n  MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;\n  SQL Server: SELECT TOP 10 * FROM users;\n  Aggregates (no LIMIT needed): SELECT COUNT(*) FROM users;\n\nAvailable connections:\n - local : SQLite, version 3.40.1\n - products : MySQL, version 8.0 [PII GUARDED - sensitive data will be redacted]\n - users : Postgres, version 16.11 (Debian 16.11-1.pgdg13+1)\n - server : SQL Server, version 2019",
+            "description": "Runs read-only SQL queries against chosen database connection.\nOnly SELECT queries are allowed. INSERT, UPDATE, DELETE, DROP, and other write operations are blocked.\n\nSTART HERE - REQUIRED DISCOVERY FLOW:\n- Before writing SQL, read db://{connection} to list available tables for the target connection.\n- Then read db://{connection}/{table} for the exact schema of tables you plan to query.\n- This avoids \"table not found\" and wrong-column errors.\n- Before querying information_schema/system catalogs for metadata/definitions, try\n  database_schema with detail=\"full\" (and includeRoutines/includeViews when needed).\n\nCRITICAL - ROW LIMIT:\n- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.\n- MySQL/PostgreSQL/SQLite: Use LIMIT 10\n- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)\n\nRULES:\n1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.\n2. Check the connection type before writing the query - use correct syntax for that database.\n3. For more rows, use pagination with OFFSET.\n4. Large text columns (>200 chars) are truncated to \"<TEXT>\" in multi-row results. To view full text, Query MUST return exactly 1 row.\n\nExamples:\n  MySQL/PostgreSQL/SQLite: SELECT * FROM users LIMIT 10;\n  SQL Server: SELECT TOP 10 * FROM users;\n  Aggregates (no LIMIT needed): SELECT COUNT(*) FROM users;\n\nAvailable connections:\n - local : SQLite, version 3.40.1\n - products : MySQL, version 8.0 [PII GUARDED - sensitive data will be redacted]\n - users : Postgres, version 16.11 (Debian 16.11-1.pgdg13+1)\n - server : SQL Server, version 2019",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -27,7 +27,7 @@
         },
         {
             "name": "schema",
-            "description": "Inspect schema for a database connection.\n\nUse detail=\"summary\" (default) to list matching object names.\nUse detail=\"columns\" to list matching tables with column types.\nUse detail=\"full\" to return full structures (columns, indexes, foreign keys, triggers, check constraints).\n\nFilter note:\n- filter is required and matches object names (tables, views, procedures, functions, sequences).\n- Use filter=\"\" to include all object names.\n\nRecommended flow:\n1. Call with detail=\"summary\" and empty filter to discover names.\n2. Call with detail=\"columns\" to inspect column names and types.\n3. Call again with a refined filter and detail=\"full\" for exact structure.\n\nRoutine note:\n- includeRoutines=true returns stored_procedures, functions, and sequences.\n- In PostgreSQL, many routines are exposed as functions (not procedures).\n\nMetadata note:\n- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.\n\nIf detail=\"columns\" or detail=\"full\" output is too large, the tool returns ToolUsageError and asks for a narrower filter.",
+            "description": "Inspect schema for a database connection.\n\nUse database_schema(detail=\"full\", includeRoutines=true) as the default way to fetch\ntrigger/function/procedure/view definitions. Prefer this over raw\ninformation_schema/system catalog queries.\n\nDetail levels:\n- summary (default): matching table names.\n- columns: matching tables with column types.\n- full: full table structures (columns, indexes, foreign keys, triggers, check constraints).\n\nObject coverage:\n- tables: columns/indexes/foreign keys/check constraints/triggers (with trigger definitions in full detail).\n- views: SQL definitions when includeViews=true.\n- routines: function/procedure definitions when includeRoutines=true and detail=\"full\".\n\nInclude flags:\n- includeViews=true adds view names for summary/columns.\n- includeRoutines=true adds stored_procedures, functions, sequences, and trigger names for summary/columns.\n- Triggers are included under each table for detail=\"full\" and are not duplicated under routines.\n\nDefinition preference:\n- If output already includes a definition field, do not re-query raw catalogs/system tables.\n\nUsage guidance:\n- detail=\"full\" and detail=\"columns\" should be used with a narrow filter whenever possible.\n- Large full/columns outputs are rejected with ToolUsageError; refine filter or use summary.\n\nFilter note:\n- filter is optional and matches object names (tables, views, procedures, functions, sequences, triggers).\n- In detail=\"full\", matching routine/view/trigger objects include their definitions in output.\n- Omit filter (or use filter=\"\") to include all object names.\n\nExamples:\n- Get trigger function body by name:\n  connection=\"users\", filter=\"trg_users_insert_fn\", detail=\"full\", includeRoutines=true\n- Get view SQL by view name:\n  connection=\"users\", filter=\"my_view\", detail=\"full\", includeViews=true\n- Get all routines in schema prefix:\n  connection=\"users\", filter=\"public.\", matchMode=\"prefix\", detail=\"full\", includeRoutines=true\n\nRoutine note:\n- In PostgreSQL, many routines are exposed as functions (not procedures).\n\nIf detail=\"columns\" or detail=\"full\" output is too large, the tool returns ToolUsageError and asks for a narrower filter.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -37,11 +37,12 @@
                     },
                     "filter": {
                         "type": "string",
-                        "description": "Required object-name filter; empty string means all"
+                        "description": "Optional object-name filter; empty string means all",
+                        "default": ""
                     },
                     "detail": {
                         "type": "string",
-                        "description": "Schema detail level: summary, columns, or full",
+                        "description": "Schema detail level: summary (names), columns (types), or full (full structures)",
                         "default": "summary"
                     },
                     "matchMode": {
@@ -56,11 +57,11 @@
                     },
                     "includeRoutines": {
                         "type": "boolean",
-                        "description": "Include procedures, functions, and sequences in response",
+                        "description": "Include procedures/functions/sequences and trigger names in routines output",
                         "default": false
                     }
                 },
-                "required": ["connection", "filter"]
+                "required": ["connection"]
             },
             "annotations": {
                 "title": "Database Schema structure",

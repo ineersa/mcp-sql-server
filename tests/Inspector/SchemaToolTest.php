@@ -26,7 +26,21 @@ final class SchemaToolTest extends InspectorSnapshotTestCase
      */
     public static function provideMethods(): array
     {
-        $baseTests = [];
+        $baseTests = [
+            'Schema Tool - local (No Filter Default)' => [
+                'method' => 'tools/call',
+                'options' => [
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => 'local',
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
+                ],
+                'testName' => 'local_no_filter',
+            ],
+        ];
 
         foreach (['local', 'products'] as $connection) {
             $baseTests[\sprintf('Schema Tool - %s (Basic)', $connection)] = [
@@ -112,6 +126,23 @@ final class SchemaToolTest extends InspectorSnapshotTestCase
                     ],
                 ],
                 'testName' => $connection.'_filter',
+            ];
+
+            $baseTests[\sprintf('Schema Tool - %s (Routines Include Triggers)', $connection)] = [
+                'method' => 'tools/call',
+                'options' => [
+                    'toolName' => 'schema',
+                    'toolArgs' => [
+                        'connection' => $connection,
+                        'filter' => 'trg_users_insert',
+                        'detail' => 'summary',
+                        'includeRoutines' => true,
+                    ],
+                    'envVars' => [
+                        'DATABASE_CONFIG_FILE' => \sprintf('%s/databases.test.yaml', \dirname(__DIR__, 2)),
+                    ],
+                ],
+                'testName' => $connection.'_routines_triggers',
             ];
         }
 

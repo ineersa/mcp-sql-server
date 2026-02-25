@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_sqlite\ndetail: summary\nmatch_mode: contains\ntables[0]:\nroutines:\n  stored_procedures[0]:\n  functions[0]:\n  sequences[0]:\n  triggers[1]: trg_users_insert"
+    }
+  ],
+  "isError": false
+}
