@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "engine: pdo_sqlite\ndetail: summary\nmatch_mode: contains\ntables[3]: \"\\\"pii_samples\\\"\",\"\\\"products\\\"\",\"\\\"users\\\"\""
+    }
+  ],
+  "isError": false
+}

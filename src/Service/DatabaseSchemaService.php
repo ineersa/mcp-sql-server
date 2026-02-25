@@ -37,20 +37,33 @@ final class DatabaseSchemaService
         bool $includeViews,
         bool $includeRoutines,
     ): array {
+        $normalizedDetail = $this->normalizeDetail($detail);
+        $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
+        $shouldIncludeViews = $includeViews || self::DETAIL_FULL === $normalizedDetail;
+        $shouldIncludeRoutines = $includeRoutines || self::DETAIL_FULL === $normalizedDetail;
+
         $cacheKey = \sprintf(
             'database_schema_%s_%s_%s_%s_%d_%d',
             md5(serialize($conn->getParams())),
             md5($filter),
-            md5($detail),
-            md5($matchMode),
-            (int) $includeViews,
-            (int) $includeRoutines
+            md5($normalizedDetail),
+            md5($normalizedMatchMode),
+            (int) $shouldIncludeViews,
+            (int) $shouldIncludeRoutines
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines) {
+        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines) {
             $item->expiresAfter(60);
 
-            return $this->buildSchemaStructure($conn, $engineName, $filter, $detail, $matchMode, $includeViews, $includeRoutines);
+            return $this->buildSchemaStructure(
+                $conn,
+                $engineName,
+                $filter,
+                $normalizedDetail,
+                $normalizedMatchMode,
+                $shouldIncludeViews,
+                $shouldIncludeRoutines,
+            );
         });
     }
 
@@ -109,7 +122,7 @@ final class DatabaseSchemaService
         }
 
         if ($includeRoutines) {
-            $result['routines'] = [
+            $routines = [
                 'stored_procedures' => self::DETAIL_FULL === $normalizedDetail
                     ? $this->getStoredProceduresStructure($conn, $filter, $normalizedMatchMode)
                     : $this->getStoredProceduresNames($conn, $filter, $normalizedMatchMode),
@@ -120,6 +133,12 @@ final class DatabaseSchemaService
                     ? $this->getSequencesStructure($conn, $filter, $normalizedMatchMode)
                     : $this->getSequencesNames($conn, $filter, $normalizedMatchMode),
             ];
+
+            if (self::DETAIL_FULL !== $normalizedDetail) {
+                $routines['triggers'] = $this->getTriggersNames($conn, $filter, $normalizedMatchMode);
+            }
+
+            $result['routines'] = $routines;
         }
 
         return $result;
@@ -447,6 +466,64 @@ final class DatabaseSchemaService
     }
 
     /**
+     * @return list<string>
+     */
+    private function getTriggers(Connection $conn): array
+    {
+        $driver = $this->detectDriver($conn);
+
+        try {
+            if (str_contains($driver, 'mysql') || str_contains($driver, 'mariadb')) {
+                $stmt = $conn->executeQuery('SELECT DISTINCT TRIGGER_NAME AS name FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()');
+                $rows = $stmt->fetchAllAssociative();
+
+                return $this->extractObjectNames($rows, 'name');
+            }
+            if (str_contains($driver, 'postgres')) {
+                $stmt = $conn->executeQuery('SELECT DISTINCT trigger_name AS name FROM information_schema.triggers WHERE trigger_schema = current_schema()');
+                $rows = $stmt->fetchAllAssociative();
+
+                return $this->extractObjectNames($rows, 'name');
+            }
+            if (str_contains($driver, 'sqlite')) {
+                $stmt = $conn->executeQuery("SELECT name FROM sqlite_master WHERE type = 'trigger'");
+                $rows = $stmt->fetchAllAssociative();
+
+                return $this->extractObjectNames($rows, 'name');
+            }
+            if (str_contains($driver, 'sqlsrv') || str_contains($driver, 'sqlserver')) {
+                $stmt = $conn->executeQuery('SELECT DISTINCT t.name
+                     FROM sys.triggers t
+                     JOIN sys.tables tbl ON t.parent_id = tbl.object_id
+                     WHERE t.is_ms_shipped = 0');
+                $rows = $stmt->fetchAllAssociative();
+
+                return $this->extractObjectNames($rows, 'name');
+            }
+        } catch (\Exception $e) {
+            $this->logger->warning('Failed to get triggers list', ['error' => $e->getMessage()]);
+        }
+
+        return [];
+    }
+
+    /** @return list<string> */
+    private function getTriggersNames(Connection $conn, string $filter, string $matchMode): array
+    {
+        $names = [];
+
+        foreach ($this->getTriggers($conn) as $triggerName) {
+            if (!$this->matchesFilter($triggerName, $filter, $matchMode)) {
+                continue;
+            }
+
+            $names[] = $triggerName;
+        }
+
+        return $names;
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     private function getSequencesStructure(Connection $conn, string $filter, string $matchMode): array
@@ -651,5 +728,26 @@ final class DatabaseSchemaService
         $driver = \get_class($conn->getDatabasePlatform());
 
         return strtolower(basename(str_replace('\\', '/', $driver)));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     *
+     * @return list<string>
+     */
+    private function extractObjectNames(array $rows, string $key): array
+    {
+        $names = array_map(
+            static function (array $row) use ($key): string {
+                $name = $row[$key] ?? '';
+
+                return \is_scalar($name) ? (string) $name : '';
+            },
+            $rows
+        );
+
+        $names = array_values(array_filter($names, static fn (string $name): bool => '' !== trim($name)));
+
+        return array_values(array_unique($names));
     }
 }

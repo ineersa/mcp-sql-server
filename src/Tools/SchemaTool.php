@@ -28,13 +28,20 @@ final class SchemaTool
     public const string DESCRIPTION = <<<DESCRIPTION
 Inspect schema for a database connection.
 
-Use detail="summary" (default) to list matching object names.
-Use detail="columns" to list matching tables with column types.
-Use detail="full" to return full structures (columns, indexes, foreign keys, triggers, check constraints).
+Detail levels:
+- summary (default): matching table names.
+- columns: matching tables with column types.
+- full: full table structures (columns, indexes, foreign keys, triggers, check constraints).
+
+Include flags:
+- includeViews=true adds view names for summary/columns.
+- includeRoutines=true adds stored_procedures, functions, sequences, and trigger names for summary/columns.
+- detail="full" automatically includes views and routines.
+  Triggers are included under each table and are not duplicated under routines.
 
 Filter note:
-- filter is required and matches object names (tables, views, procedures, functions, sequences).
-- Use filter="" to include all object names.
+- filter is optional and matches object names (tables, views, procedures, functions, sequences, triggers).
+- Omit filter (or use filter="") to include all object names.
 
 Recommended flow:
 1. Call with detail="summary" and empty filter to discover names.
@@ -42,7 +49,6 @@ Recommended flow:
 3. Call again with a refined filter and detail="full" for exact structure.
 
 Routine note:
-- includeRoutines=true returns stored_procedures, functions, and sequences.
 - In PostgreSQL, many routines are exposed as functions (not procedures).
 
 Metadata note:
@@ -77,15 +83,15 @@ DESCRIPTION;
 
     /**
      * @param string $connection      Connection name
-     * @param string $filter          Required object-name filter; empty string means all
-     * @param string $detail          Schema detail level: summary, columns, or full
+     * @param string $filter          Optional object-name filter; empty string means all
+     * @param string $detail          Schema detail level: summary (names), columns (types), or full (full structures)
      * @param string $matchMode       Filter matching mode: contains, prefix, exact, glob
-     * @param bool   $includeViews    Include views in response
-     * @param bool   $includeRoutines Include procedures, functions, and sequences in response
+     * @param bool   $includeViews    Include views in response for summary/columns (always included in full)
+     * @param bool   $includeRoutines Include procedures/functions/sequences and trigger names for summary/columns (always included in full)
      */
     public function __invoke(
         string $connection,
-        string $filter,
+        string $filter = '',
         string $detail = self::DETAIL_SUMMARY,
         string $matchMode = self::MATCH_MODE_CONTAINS,
         bool $includeViews = false,
@@ -113,7 +119,7 @@ DESCRIPTION;
                 $estimatedTokens = $this->estimateTokenCount($encodedSchema);
 
                 if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS && !$this->isSingleTableResult($schema)) {
-                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter or switch to detail="summary". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
+                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter or switch to detail="summary" or detail="columns". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
                 }
             }
 

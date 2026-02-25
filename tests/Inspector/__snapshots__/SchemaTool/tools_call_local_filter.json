@@ -2,7 +2,7 @@
   "content": [
     {
       "type": "text",
-      "text": "engine: pdo_sqlite\ndetail: summary\nmatch_mode: prefix\ntables[1]: \"\\\"users\\\"\"\nviews[0]:\nroutines:\n  stored_procedures[0]:\n  functions[0]:\n  sequences[0]:"
+      "text": "engine: pdo_sqlite\ndetail: summary\nmatch_mode: prefix\ntables[1]: \"\\\"users\\\"\"\nviews[0]:\nroutines:\n  stored_procedures[0]:\n  functions[0]:\n  sequences[0]:\n  triggers[0]:"
     }
   ],
   "isError": false

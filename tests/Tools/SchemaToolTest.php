@@ -112,6 +112,22 @@ YAML);
         $this->assertStringContainsString('too large', strtolower($payload));
     }
 
+    public function testFilterDefaultsToEmptyStringWhenOmitted(): void
+    {
+        $this->connection->executeStatement('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)');
+
+        $result = ($this->schemaTool)('local');
+
+        $this->assertFalse($result->isError);
+        $this->assertCount(1, $result->content);
+
+        $content = $result->content[0];
+        $this->assertInstanceOf(TextContent::class, $content);
+        /** @var TextContent $content */
+        $payload = (string) $content->text;
+        $this->assertStringContainsString('users', strtolower($payload));
+    }
+
     private function createWideTables(int $tableCount, int $columnCount): void
     {
         for ($table = 1; $table <= $tableCount; ++$table) {

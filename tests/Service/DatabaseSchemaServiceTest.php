@@ -28,6 +28,8 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->connection->executeStatement('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)');
         $this->connection->executeStatement('CREATE TABLE user_profiles (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL)');
         $this->connection->executeStatement('CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL)');
+        $this->connection->executeStatement('CREATE VIEW active_users AS SELECT id, email FROM users');
+        $this->connection->executeStatement('CREATE TRIGGER trg_users_insert AFTER INSERT ON users BEGIN SELECT 1; END');
 
         $this->service = new DatabaseSchemaService(new ArrayAdapter(), new NullLogger());
     }
@@ -124,6 +126,68 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->assertArrayHasKey('columns', $table);
         $this->assertArrayHasKey('indexes', $table);
         $this->assertArrayHasKey('foreign_keys', $table);
+        $this->assertArrayHasKey('views', $result);
+        $this->assertArrayHasKey('routines', $result);
+    }
+
+    public function testFullDetailAutomaticallyIncludesViewsAndRoutines(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            $this->connection,
+            'pdo_sqlite',
+            '',
+            'full',
+            'contains',
+            false,
+            false,
+        );
+
+        $this->assertArrayHasKey('views', $result);
+        $this->assertNotEmpty($result['views']);
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertArrayHasKey('stored_procedures', $result['routines']);
+        $this->assertArrayHasKey('functions', $result['routines']);
+        $this->assertArrayHasKey('sequences', $result['routines']);
+    }
+
+    public function testIncludeRoutinesAddsTriggersForSummaryDetail(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'summary',
+            'contains',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertIsArray($result['routines']);
+        $this->assertArrayHasKey('triggers', $result['routines']);
+        $this->assertContains('trg_users_insert', $result['routines']['triggers']);
+    }
+
+    public function testFullDetailDoesNotDuplicateTriggersUnderRoutines(): void
+    {
+        $result = $this->service->getSchemaStructure(
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'full',
+            'contains',
+            false,
+            true,
+        );
+
+        $this->assertArrayHasKey('routines', $result);
+        $this->assertIsArray($result['routines']);
+        $this->assertArrayNotHasKey('triggers', $result['routines']);
+
+        $table = reset($result['tables']);
+        $this->assertIsArray($table);
+        $this->assertArrayHasKey('triggers', $table);
+        $this->assertNotEmpty($table['triggers']);
     }
 
     /**

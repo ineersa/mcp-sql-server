@@ -27,7 +27,7 @@
         },
         {
             "name": "schema",
-            "description": "Inspect schema for a database connection.\n\nUse detail=\"summary\" (default) to list matching object names.\nUse detail=\"columns\" to list matching tables with column types.\nUse detail=\"full\" to return full structures (columns, indexes, foreign keys, triggers, check constraints).\n\nFilter note:\n- filter is required and matches object names (tables, views, procedures, functions, sequences).\n- Use filter=\"\" to include all object names.\n\nRecommended flow:\n1. Call with detail=\"summary\" and empty filter to discover names.\n2. Call with detail=\"columns\" to inspect column names and types.\n3. Call again with a refined filter and detail=\"full\" for exact structure.\n\nRoutine note:\n- includeRoutines=true returns stored_procedures, functions, and sequences.\n- In PostgreSQL, many routines are exposed as functions (not procedures).\n\nMetadata note:\n- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.\n\nIf detail=\"columns\" or detail=\"full\" output is too large, the tool returns ToolUsageError and asks for a narrower filter.",
+            "description": "Inspect schema for a database connection.\n\nDetail levels:\n- summary (default): matching table names.\n- columns: matching tables with column types.\n- full: full table structures (columns, indexes, foreign keys, triggers, check constraints).\n\nInclude flags:\n- includeViews=true adds view names for summary/columns.\n- includeRoutines=true adds stored_procedures, functions, sequences, and trigger names for summary/columns.\n- detail=\"full\" automatically includes views and routines.\n  Triggers are included under each table and are not duplicated under routines.\n\nFilter note:\n- filter is optional and matches object names (tables, views, procedures, functions, sequences, triggers).\n- Omit filter (or use filter=\"\") to include all object names.\n\nRecommended flow:\n1. Call with detail=\"summary\" and empty filter to discover names.\n2. Call with detail=\"columns\" to inspect column names and types.\n3. Call again with a refined filter and detail=\"full\" for exact structure.\n\nRoutine note:\n- In PostgreSQL, many routines are exposed as functions (not procedures).\n\nMetadata note:\n- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.\n\nIf detail=\"columns\" or detail=\"full\" output is too large, the tool returns ToolUsageError and asks for a narrower filter.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -37,11 +37,12 @@
                     },
                     "filter": {
                         "type": "string",
-                        "description": "Required object-name filter; empty string means all"
+                        "description": "Optional object-name filter; empty string means all",
+                        "default": ""
                     },
                     "detail": {
                         "type": "string",
-                        "description": "Schema detail level: summary, columns, or full",
+                        "description": "Schema detail level: summary (names), columns (types), or full (full structures)",
                         "default": "summary"
                     },
                     "matchMode": {
@@ -51,16 +52,16 @@
                     },
                     "includeViews": {
                         "type": "boolean",
-                        "description": "Include views in response",
+                        "description": "Include views in response for summary/columns (always included in full)",
                         "default": false
                     },
                     "includeRoutines": {
                         "type": "boolean",
-                        "description": "Include procedures, functions, and sequences in response",
+                        "description": "Include procedures/functions/sequences and trigger names for summary/columns (always included in full)",
                         "default": false
                     }
                 },
-                "required": ["connection", "filter"]
+                "required": ["connection"]
             },
             "annotations": {
                 "title": "Database Schema structure",
