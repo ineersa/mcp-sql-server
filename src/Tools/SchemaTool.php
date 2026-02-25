@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tools;
 
+use App\Enum\SchemaDetail;
+use App\Enum\SchemaMatchMode;
 use App\Exception\ToolUsageError;
 use App\Service\DatabaseSchemaService;
 use App\Service\DoctrineConfigLoader;
@@ -17,13 +19,6 @@ final class SchemaTool
 {
     public const string NAME = 'schema';
     public const string TITLE = 'Database Schema structure';
-    public const string DETAIL_SUMMARY = 'summary';
-    public const string DETAIL_COLUMNS = 'columns';
-    public const string DETAIL_FULL = 'full';
-    public const string MATCH_MODE_CONTAINS = 'contains';
-    public const string MATCH_MODE_PREFIX = 'prefix';
-    public const string MATCH_MODE_EXACT = 'exact';
-    public const string MATCH_MODE_GLOB = 'glob';
 
     public const string DESCRIPTION = <<<DESCRIPTION
 Inspect schema for a database connection.
@@ -59,21 +54,6 @@ DESCRIPTION;
 
     private const int MAX_OUTPUT_TOKENS = 2500;
 
-    /** @var list<string> */
-    private const array ALLOWED_DETAILS = [
-        self::DETAIL_SUMMARY,
-        self::DETAIL_COLUMNS,
-        self::DETAIL_FULL,
-    ];
-
-    /** @var list<string> */
-    private const array ALLOWED_MATCH_MODES = [
-        self::MATCH_MODE_CONTAINS,
-        self::MATCH_MODE_PREFIX,
-        self::MATCH_MODE_EXACT,
-        self::MATCH_MODE_GLOB,
-    ];
-
     public function __construct(
         private DatabaseSchemaService $databaseSchemaService,
         private DoctrineConfigLoader $doctrineConfigLoader,
@@ -92,8 +72,8 @@ DESCRIPTION;
     public function __invoke(
         string $connection,
         string $filter = '',
-        string $detail = self::DETAIL_SUMMARY,
-        string $matchMode = self::MATCH_MODE_CONTAINS,
+        string $detail = SchemaDetail::SUMMARY->value,
+        string $matchMode = SchemaMatchMode::CONTAINS->value,
         bool $includeViews = false,
         bool $includeRoutines = false,
     ): CallToolResult {
@@ -104,6 +84,7 @@ DESCRIPTION;
             $conn = $this->doctrineConfigLoader->getConnection($connection);
 
             $schema = $this->databaseSchemaService->getSchemaStructure(
+                $connection,
                 $conn,
                 $this->doctrineConfigLoader->getConnectionType($connection) ?? 'unknown',
                 $filter,
@@ -115,7 +96,7 @@ DESCRIPTION;
 
             $encodedSchema = Toon::encode($schema);
 
-            if (self::DETAIL_SUMMARY !== $detail) {
+            if (SchemaDetail::SUMMARY->value !== $detail) {
                 $estimatedTokens = $this->estimateTokenCount($encodedSchema);
 
                 if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS && !$this->isSingleTableResult($schema)) {
@@ -184,24 +165,22 @@ DESCRIPTION;
 
     private function normalizeDetail(string $detail): string
     {
-        $normalized = strtolower(trim($detail));
-
-        if (!\in_array($normalized, self::ALLOWED_DETAILS, true)) {
-            throw new ToolUsageError(message: \sprintf('Invalid detail value "%s".', $detail), hint: 'Use detail="summary", detail="columns", or detail="full".', retryable: false);
+        $detailEnum = SchemaDetail::tryFromInput($detail);
+        if (null === $detailEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid detail value "%s".', $detail), hint: \sprintf('Use one of: %s.', implode(', ', SchemaDetail::values())), retryable: false);
         }
 
-        return $normalized;
+        return $detailEnum->value;
     }
 
     private function normalizeMatchMode(string $matchMode): string
     {
-        $normalized = strtolower(trim($matchMode));
-
-        if (!\in_array($normalized, self::ALLOWED_MATCH_MODES, true)) {
-            throw new ToolUsageError(message: \sprintf('Invalid matchMode value "%s".', $matchMode), hint: 'Use one of: contains, prefix, exact, glob.', retryable: false);
+        $matchModeEnum = SchemaMatchMode::tryFromInput($matchMode);
+        if (null === $matchModeEnum) {
+            throw new ToolUsageError(message: \sprintf('Invalid matchMode value "%s".', $matchMode), hint: \sprintf('Use one of: %s.', implode(', ', SchemaMatchMode::values())), retryable: false);
         }
 
-        return $normalized;
+        return $matchModeEnum->value;
     }
 
     /** @param array<string, mixed> $schema */

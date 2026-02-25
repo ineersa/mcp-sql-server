@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Exception\ToolUsageError;
 use App\Service\DatabaseSchemaService;
+use App\Service\Schema\MysqlSchemaInspector;
+use App\Service\Schema\PostgreSqlSchemaInspector;
+use App\Service\Schema\SchemaInspectorFactory;
+use App\Service\Schema\SqliteSchemaInspector;
+use App\Service\Schema\SqlServerSchemaInspector;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -31,12 +37,21 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->connection->executeStatement('CREATE VIEW active_users AS SELECT id, email FROM users');
         $this->connection->executeStatement('CREATE TRIGGER trg_users_insert AFTER INSERT ON users BEGIN SELECT 1; END');
 
-        $this->service = new DatabaseSchemaService(new ArrayAdapter(), new NullLogger());
+        $logger = new NullLogger();
+        $schemaInspectorFactory = new SchemaInspectorFactory(
+            new MysqlSchemaInspector($logger),
+            new PostgreSqlSchemaInspector($logger),
+            new SqliteSchemaInspector($logger),
+            new SqlServerSchemaInspector($logger),
+        );
+
+        $this->service = new DatabaseSchemaService(new ArrayAdapter(), $schemaInspectorFactory);
     }
 
     public function testSummaryDetailReturnsOnlyMatchingTableNames(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'user',
@@ -53,6 +68,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testExactMatchModeReturnsSingleExactName(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -68,6 +84,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testGlobMatchModeSupportsWildcards(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'user*',
@@ -83,6 +100,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testColumnsDetailReturnsColumnTypesWithoutFullMetadata(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -108,6 +126,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testFullDetailReturnsStructuredTableData(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -133,6 +152,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testFullDetailAutomaticallyIncludesViewsAndRoutines(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             '',
@@ -153,6 +173,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testIncludeRoutinesAddsTriggersForSummaryDetail(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -171,6 +192,7 @@ final class DatabaseSchemaServiceTest extends TestCase
     public function testFullDetailDoesNotDuplicateTriggersUnderRoutines(): void
     {
         $result = $this->service->getSchemaStructure(
+            'local',
             $this->connection,
             'pdo_sqlite',
             'users',
@@ -188,6 +210,40 @@ final class DatabaseSchemaServiceTest extends TestCase
         $this->assertIsArray($table);
         $this->assertArrayHasKey('triggers', $table);
         $this->assertNotEmpty($table['triggers']);
+    }
+
+    public function testInvalidDetailThrowsToolUsageError(): void
+    {
+        $this->expectException(ToolUsageError::class);
+        $this->expectExceptionMessage('Invalid detail value');
+
+        $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'invalid-detail',
+            'contains',
+            false,
+            false,
+        );
+    }
+
+    public function testInvalidMatchModeThrowsToolUsageError(): void
+    {
+        $this->expectException(ToolUsageError::class);
+        $this->expectExceptionMessage('Invalid matchMode value');
+
+        $this->service->getSchemaStructure(
+            'local',
+            $this->connection,
+            'pdo_sqlite',
+            'users',
+            'summary',
+            'invalid-mode',
+            false,
+            false,
+        );
     }
 
     /**

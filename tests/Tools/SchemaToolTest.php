@@ -6,6 +6,11 @@ namespace App\Tests\Tools;
 
 use App\Service\DatabaseSchemaService;
 use App\Service\DoctrineConfigLoader;
+use App\Service\Schema\MysqlSchemaInspector;
+use App\Service\Schema\PostgreSqlSchemaInspector;
+use App\Service\Schema\SchemaInspectorFactory;
+use App\Service\Schema\SqliteSchemaInspector;
+use App\Service\Schema\SqlServerSchemaInspector;
 use App\Tools\SchemaTool;
 use Doctrine\DBAL\Connection;
 use Mcp\Schema\Content\TextContent;
@@ -52,7 +57,13 @@ YAML);
         $loader->loadAndValidate();
 
         $this->connection = $loader->getConnection('local');
-        $schemaService = new DatabaseSchemaService(new ArrayAdapter(), $logger);
+        $schemaInspectorFactory = new SchemaInspectorFactory(
+            new MysqlSchemaInspector($logger),
+            new PostgreSqlSchemaInspector($logger),
+            new SqliteSchemaInspector($logger),
+            new SqlServerSchemaInspector($logger),
+        );
+        $schemaService = new DatabaseSchemaService(new ArrayAdapter(), $schemaInspectorFactory);
         $this->schemaTool = new SchemaTool($schemaService, $loader, $logger);
     }
 
@@ -126,6 +137,43 @@ YAML);
         /** @var TextContent $content */
         $payload = (string) $content->text;
         $this->assertStringContainsString('users', strtolower($payload));
+    }
+
+    public function testRejectsInvalidDetailValueWithExplicitHint(): void
+    {
+        $result = ($this->schemaTool)('local', '', 'unknown-detail');
+
+        $this->assertTrue($result->isError);
+        $this->assertCount(1, $result->content);
+
+        $content = $result->content[0];
+        $this->assertInstanceOf(TextContent::class, $content);
+        /** @var TextContent $content */
+        $payload = strtolower((string) $content->text);
+        $this->assertStringContainsString('invalid detail value', $payload);
+        $this->assertStringContainsString('use one of', $payload);
+        $this->assertStringContainsString('summary', $payload);
+        $this->assertStringContainsString('columns', $payload);
+        $this->assertStringContainsString('full', $payload);
+    }
+
+    public function testRejectsInvalidMatchModeValueWithExplicitHint(): void
+    {
+        $result = ($this->schemaTool)('local', '', 'summary', 'unknown-mode');
+
+        $this->assertTrue($result->isError);
+        $this->assertCount(1, $result->content);
+
+        $content = $result->content[0];
+        $this->assertInstanceOf(TextContent::class, $content);
+        /** @var TextContent $content */
+        $payload = strtolower((string) $content->text);
+        $this->assertStringContainsString('invalid matchmode value', $payload);
+        $this->assertStringContainsString('use one of', $payload);
+        $this->assertStringContainsString('contains', $payload);
+        $this->assertStringContainsString('prefix', $payload);
+        $this->assertStringContainsString('exact', $payload);
+        $this->assertStringContainsString('glob', $payload);
     }
 
     private function createWideTables(int $tableCount, int $columnCount): void
