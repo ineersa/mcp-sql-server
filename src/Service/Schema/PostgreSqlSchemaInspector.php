@@ -89,4 +89,74 @@ final class PostgreSqlSchemaInspector implements DriverSchemaInspectorInterface
             return [];
         }
     }
+
+    public function getStoredProcedureDefinition(Connection $connection, string $procedureName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                "SELECT pg_get_functiondef(p.oid) AS definition
+                 FROM pg_proc p
+                 JOIN pg_namespace n ON p.pronamespace = n.oid
+                 WHERE n.nspname = current_schema()
+                   AND p.prokind = 'p'
+                   AND p.proname = ?
+                 ORDER BY p.oid
+                 LIMIT 1",
+                [$procedureName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get stored procedure definition', ['procedure' => $procedureName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getFunctionDefinition(Connection $connection, string $functionName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                "SELECT pg_get_functiondef(p.oid) AS definition
+                 FROM pg_proc p
+                 JOIN pg_namespace n ON p.pronamespace = n.oid
+                 WHERE n.nspname = current_schema()
+                   AND p.prokind = 'f'
+                   AND p.proname = ?
+                 ORDER BY p.oid
+                 LIMIT 1",
+                [$functionName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get function definition', ['function' => $functionName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getTriggerDefinition(Connection $connection, string $triggerName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                'SELECT pg_get_triggerdef(t.oid, true) AS definition
+                 FROM pg_trigger t
+                 JOIN pg_class c ON c.oid = t.tgrelid
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE NOT t.tgisinternal
+                   AND n.nspname = current_schema()
+                   AND t.tgname = ?
+                 ORDER BY t.oid
+                 LIMIT 1',
+                [$triggerName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
 }

@@ -23,36 +23,52 @@ final class SchemaTool
     public const string DESCRIPTION = <<<DESCRIPTION
 Inspect schema for a database connection.
 
+Use database_schema(detail="full", includeRoutines=true) as the default way to fetch
+trigger/function/procedure/view definitions. Prefer this over raw
+information_schema/system catalog queries.
+
 Detail levels:
 - summary (default): matching table names.
 - columns: matching tables with column types.
 - full: full table structures (columns, indexes, foreign keys, triggers, check constraints).
 
+Object coverage:
+- tables: columns/indexes/foreign keys/check constraints/triggers (with trigger definitions in full detail).
+- views: SQL definitions when includeViews=true.
+- routines: function/procedure definitions when includeRoutines=true and detail="full".
+
 Include flags:
 - includeViews=true adds view names for summary/columns.
 - includeRoutines=true adds stored_procedures, functions, sequences, and trigger names for summary/columns.
-- detail="full" automatically includes views and routines.
-  Triggers are included under each table and are not duplicated under routines.
+- Triggers are included under each table for detail="full" and are not duplicated under routines.
+
+Definition preference:
+- If output already includes a definition field, do not re-query raw catalogs/system tables.
+
+Usage guidance:
+- detail="full" and detail="columns" should be used with a narrow filter whenever possible.
+- Large full/columns outputs are rejected with ToolUsageError; refine filter or use summary.
 
 Filter note:
 - filter is optional and matches object names (tables, views, procedures, functions, sequences, triggers).
+- In detail="full", matching routine/view/trigger objects include their definitions in output.
 - Omit filter (or use filter="") to include all object names.
 
-Recommended flow:
-1. Call with detail="summary" and empty filter to discover names.
-2. Call with detail="columns" to inspect column names and types.
-3. Call again with a refined filter and detail="full" for exact structure.
+Examples:
+- Get trigger function body by name:
+  connection="users", filter="trg_users_insert_fn", detail="full", includeRoutines=true
+- Get view SQL by view name:
+  connection="users", filter="my_view", detail="full", includeViews=true
+- Get all routines in schema prefix:
+  connection="users", filter="public.", matchMode="prefix", detail="full", includeRoutines=true
 
 Routine note:
 - In PostgreSQL, many routines are exposed as functions (not procedures).
 
-Metadata note:
-- For direct information_schema/system catalog queries, use real database/schema names not MCP connection aliases.
-
 If detail="columns" or detail="full" output is too large, the tool returns ToolUsageError and asks for a narrower filter.
 DESCRIPTION;
 
-    private const int MAX_OUTPUT_TOKENS = 2500;
+    private const int MAX_OUTPUT_TOKENS = 2000;
 
     public function __construct(
         private DatabaseSchemaService $databaseSchemaService,
@@ -66,8 +82,8 @@ DESCRIPTION;
      * @param string $filter          Optional object-name filter; empty string means all
      * @param string $detail          Schema detail level: summary (names), columns (types), or full (full structures)
      * @param string $matchMode       Filter matching mode: contains, prefix, exact, glob
-     * @param bool   $includeViews    Include views in response for summary/columns (always included in full)
-     * @param bool   $includeRoutines Include procedures/functions/sequences and trigger names for summary/columns (always included in full)
+     * @param bool   $includeViews    Include views in response
+     * @param bool   $includeRoutines Include procedures/functions/sequences and trigger names in routines output
      */
     public function __invoke(
         string $connection,
@@ -96,11 +112,14 @@ DESCRIPTION;
 
             $encodedSchema = Toon::encode($schema);
 
-            if (SchemaDetail::SUMMARY->value !== $detail) {
+            if (
+                SchemaDetail::COLUMNS->value === $detail
+                || SchemaDetail::FULL->value === $detail
+            ) {
                 $estimatedTokens = $this->estimateTokenCount($encodedSchema);
 
-                if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS && !$this->isSingleTableResult($schema)) {
-                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter or switch to detail="summary" or detail="columns". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
+                if ($estimatedTokens >= self::MAX_OUTPUT_TOKENS) {
+                    throw new ToolUsageError(message: \sprintf('Schema output is too large (estimated %d tokens).', $estimatedTokens), hint: 'Use a narrower filter (recommended for detail="columns"/"full") or switch to detail="summary". You can also refine matching with matchMode (contains, prefix, exact, glob).', retryable: false);
                 }
             }
 
@@ -181,16 +200,6 @@ DESCRIPTION;
         }
 
         return $matchModeEnum->value;
-    }
-
-    /** @param array<string, mixed> $schema */
-    private function isSingleTableResult(array $schema): bool
-    {
-        if (!isset($schema['tables']) || !\is_array($schema['tables'])) {
-            return false;
-        }
-
-        return 1 === \count($schema['tables']);
     }
 
     private function estimateTokenCount(string $payload): int

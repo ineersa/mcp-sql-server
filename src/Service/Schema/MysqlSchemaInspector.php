@@ -96,4 +96,85 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
             return [];
         }
     }
+
+    public function getStoredProcedureDefinition(Connection $connection, string $procedureName): ?string
+    {
+        try {
+            $quotedName = $this->quoteIdentifier($procedureName);
+            $row = $connection->executeQuery("SHOW CREATE PROCEDURE {$quotedName}")->fetchAssociative();
+
+            if (!\is_array($row)) {
+                return null;
+            }
+
+            return $this->extractDefinitionValue($row, ['Create Procedure']);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get stored procedure definition', ['procedure' => $procedureName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getFunctionDefinition(Connection $connection, string $functionName): ?string
+    {
+        try {
+            $quotedName = $this->quoteIdentifier($functionName);
+            $row = $connection->executeQuery("SHOW CREATE FUNCTION {$quotedName}")->fetchAssociative();
+
+            if (!\is_array($row)) {
+                return null;
+            }
+
+            return $this->extractDefinitionValue($row, ['Create Function']);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get function definition', ['function' => $functionName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getTriggerDefinition(Connection $connection, string $triggerName): ?string
+    {
+        try {
+            $quotedName = $this->quoteIdentifier($triggerName);
+            $row = $connection->executeQuery("SHOW CREATE TRIGGER {$quotedName}")->fetchAssociative();
+
+            if (!\is_array($row)) {
+                return null;
+            }
+
+            return $this->extractDefinitionValue($row, ['SQL Original Statement', 'Statement', 'Create Trigger']);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<string>         $preferredKeys
+     */
+    private function extractDefinitionValue(array $row, array $preferredKeys): ?string
+    {
+        foreach ($preferredKeys as $key) {
+            $value = $row[$key] ?? null;
+            if (\is_string($value) && '' !== trim($value)) {
+                return $value;
+            }
+        }
+
+        foreach ($row as $value) {
+            if (\is_string($value) && '' !== trim($value)) {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function quoteIdentifier(string $identifier): string
+    {
+        return '`'.str_replace('`', '``', $identifier).'`';
+    }
 }

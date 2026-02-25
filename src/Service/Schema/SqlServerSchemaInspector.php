@@ -94,4 +94,67 @@ final class SqlServerSchemaInspector implements DriverSchemaInspectorInterface
             return [];
         }
     }
+
+    public function getStoredProcedureDefinition(Connection $connection, string $procedureName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                'SELECT TOP 1 sm.definition
+                 FROM sys.procedures p
+                 JOIN sys.sql_modules sm ON p.object_id = sm.object_id
+                 WHERE p.is_ms_shipped = 0
+                   AND p.name = ?
+                   AND p.schema_id = SCHEMA_ID(SCHEMA_NAME())',
+                [$procedureName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get stored procedure definition', ['procedure' => $procedureName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getFunctionDefinition(Connection $connection, string $functionName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                "SELECT TOP 1 sm.definition
+                 FROM sys.objects o
+                 JOIN sys.sql_modules sm ON o.object_id = sm.object_id
+                 WHERE o.type IN ('FN', 'IF', 'TF')
+                   AND o.is_ms_shipped = 0
+                   AND o.name = ?
+                   AND o.schema_id = SCHEMA_ID(SCHEMA_NAME())",
+                [$functionName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get function definition', ['function' => $functionName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public function getTriggerDefinition(Connection $connection, string $triggerName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                'SELECT TOP 1 sm.definition
+                 FROM sys.triggers t
+                 JOIN sys.sql_modules sm ON t.object_id = sm.object_id
+                 WHERE t.is_ms_shipped = 0
+                   AND t.name = ?',
+                [$triggerName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
 }

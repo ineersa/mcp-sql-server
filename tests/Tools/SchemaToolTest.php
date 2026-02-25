@@ -97,14 +97,20 @@ YAML);
         $this->assertStringContainsString('switch to detail', strtolower($payload));
     }
 
-    public function testAllowsLargeFullOutputForSingleTable(): void
+    public function testRejectsLargeFullOutputForSingleTable(): void
     {
         $this->createWideTables(tableCount: 1, columnCount: 500);
 
         $result = ($this->schemaTool)('local', 'wide_table_1', 'full', 'exact');
 
-        $this->assertFalse($result->isError);
+        $this->assertTrue($result->isError);
         $this->assertCount(1, $result->content);
+
+        $content = $result->content[0];
+        $this->assertInstanceOf(TextContent::class, $content);
+        /** @var TextContent $content */
+        $payload = (string) $content->text;
+        $this->assertStringContainsString('too large', strtolower($payload));
     }
 
     public function testRejectsLargeColumnsOutputWhenMultipleTablesMatch(): void
@@ -174,6 +180,26 @@ YAML);
         $this->assertStringContainsString('prefix', $payload);
         $this->assertStringContainsString('exact', $payload);
         $this->assertStringContainsString('glob', $payload);
+    }
+
+    public function testFullDetailIncludesViewDefinitions(): void
+    {
+        $this->connection->executeStatement('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)');
+        $this->connection->executeStatement('CREATE VIEW active_users AS SELECT id, email FROM users');
+
+        $result = ($this->schemaTool)('local', 'active_users', 'full', 'exact', true, false);
+
+        $this->assertFalse($result->isError);
+        $this->assertCount(1, $result->content);
+
+        $content = $result->content[0];
+        $this->assertInstanceOf(TextContent::class, $content);
+
+        /** @var TextContent $content */
+        $payload = strtolower((string) $content->text);
+
+        $this->assertStringContainsString('definition', $payload);
+        $this->assertStringContainsString('active_users', $payload);
     }
 
     private function createWideTables(int $tableCount, int $columnCount): void

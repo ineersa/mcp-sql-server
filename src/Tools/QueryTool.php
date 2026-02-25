@@ -26,6 +26,8 @@ START HERE - REQUIRED DISCOVERY FLOW:
 - Before writing SQL, read db://{connection} to list available tables for the target connection.
 - Then read db://{connection}/{table} for the exact schema of tables you plan to query.
 - This avoids "table not found" and wrong-column errors.
+- Before querying information_schema/system catalogs for metadata/definitions, try
+  database_schema with detail="full" (and includeRoutines/includeViews when needed).
 
 CRITICAL - ROW LIMIT:
 - ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.

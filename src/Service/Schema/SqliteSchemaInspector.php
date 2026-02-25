@@ -62,4 +62,30 @@ final class SqliteSchemaInspector implements DriverSchemaInspectorInterface
     {
         return [];
     }
+
+    public function getStoredProcedureDefinition(Connection $connection, string $procedureName): ?string
+    {
+        return null;
+    }
+
+    public function getFunctionDefinition(Connection $connection, string $functionName): ?string
+    {
+        return null;
+    }
+
+    public function getTriggerDefinition(Connection $connection, string $triggerName): ?string
+    {
+        try {
+            $definition = $connection->executeQuery(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+                [$triggerName]
+            )->fetchOne();
+
+            return \is_string($definition) ? $definition : null;
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
 }

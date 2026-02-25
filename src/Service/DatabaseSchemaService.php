@@ -36,21 +36,23 @@ final class DatabaseSchemaService
     ): array {
         $normalizedDetail = $this->normalizeDetail($detail);
         $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
-        $shouldIncludeViews = $includeViews || SchemaDetail::FULL->value === $normalizedDetail;
-        $shouldIncludeRoutines = $includeRoutines || SchemaDetail::FULL->value === $normalizedDetail;
+        $shouldIncludeViews = $includeViews;
+        $shouldIncludeRoutines = $includeRoutines;
+        $shouldIncludeDefinitions = SchemaDetail::FULL->value === $normalizedDetail;
         $schemaInspector = $this->schemaInspectorFactory->create($conn);
 
         $cacheKey = \sprintf(
-            'database_schema_%s_%s_%s_%s_%d_%d',
+            'database_schema_%s_%s_%s_%s_%d_%d_%d',
             md5($connectionName),
             md5($filter),
             md5($normalizedDetail),
             md5($normalizedMatchMode),
             (int) $shouldIncludeViews,
-            (int) $shouldIncludeRoutines
+            (int) $shouldIncludeRoutines,
+            (int) $shouldIncludeDefinitions,
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $schemaInspector) {
+        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
             $item->expiresAfter(60);
 
             return $this->buildSchemaStructure(
@@ -62,6 +64,7 @@ final class DatabaseSchemaService
                 $normalizedMatchMode,
                 $shouldIncludeViews,
                 $shouldIncludeRoutines,
+                $shouldIncludeDefinitions,
             );
         });
     }
@@ -102,6 +105,7 @@ final class DatabaseSchemaService
         string $matchMode,
         bool $includeViews,
         bool $includeRoutines,
+        bool $includeDefinitions,
     ): array {
         $normalizedDetail = $this->normalizeDetail($detail);
         $normalizedMatchMode = $this->normalizeMatchMode($matchMode);
@@ -113,23 +117,23 @@ final class DatabaseSchemaService
             'tables' => match ($normalizedDetail) {
                 SchemaDetail::SUMMARY->value => $this->getAllTableNames($conn, $filter, $normalizedMatchMode),
                 SchemaDetail::COLUMNS->value => $this->getAllTableColumnsStructure($conn, $filter, $normalizedMatchMode),
-                default => $this->getAllTablesStructure($conn, $schemaInspector, $filter, $normalizedMatchMode),
+                default => $this->getAllTablesStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions),
             },
         ];
 
         if ($includeViews) {
             $result['views'] = SchemaDetail::FULL->value === $normalizedDetail
-                ? $this->getViewsStructure($conn, $filter, $normalizedMatchMode)
+                ? $this->getViewsStructure($conn, $filter, $normalizedMatchMode, $includeDefinitions)
                 : $this->getViewNames($conn, $filter, $normalizedMatchMode);
         }
 
         if ($includeRoutines) {
             $routines = [
                 'stored_procedures' => SchemaDetail::FULL->value === $normalizedDetail
-                    ? $this->getStoredProceduresStructure($conn, $schemaInspector, $filter, $normalizedMatchMode)
+                    ? $this->getStoredProceduresStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions)
                     : $this->getStoredProceduresNames($conn, $schemaInspector, $filter, $normalizedMatchMode),
                 'functions' => SchemaDetail::FULL->value === $normalizedDetail
-                    ? $this->getFunctionsStructure($conn, $schemaInspector, $filter, $normalizedMatchMode)
+                    ? $this->getFunctionsStructure($conn, $schemaInspector, $filter, $normalizedMatchMode, $includeDefinitions)
                     : $this->getFunctionsNames($conn, $schemaInspector, $filter, $normalizedMatchMode),
                 'sequences' => SchemaDetail::FULL->value === $normalizedDetail
                     ? $this->getSequencesStructure($conn, $filter, $normalizedMatchMode)
@@ -143,13 +147,27 @@ final class DatabaseSchemaService
             $result['routines'] = $routines;
         }
 
+        if (
+            SchemaMatchMode::EXACT->value === $normalizedMatchMode
+            && '' !== trim($filter)
+            && !$this->hasAnySchemaMatches($result)
+        ) {
+            $result['diagnostics'] = $this->buildNoMatchDiagnostics(
+                $conn,
+                $schemaInspector,
+                $filter,
+                $includeViews,
+                $includeRoutines,
+            );
+        }
+
         return $result;
     }
 
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getAllTablesStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
+    private function getAllTablesStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $schemaManager = $conn->createSchemaManager();
         $structures = [];
@@ -225,6 +243,10 @@ final class DatabaseSchemaService
                 ? $tableTriggers
                 : $matchingTriggers;
 
+            if ($includeDefinitions) {
+                $triggersToReturn = $this->enrichTriggersWithDefinitions($conn, $schemaInspector, $triggersToReturn);
+            }
+
             $structures[$tableName] = [
                 'columns' => $columns,
                 'indexes' => $indexes,
@@ -284,7 +306,7 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getViewsStructure(Connection $conn, string $filter, string $matchMode): array
+    private function getViewsStructure(Connection $conn, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $views = [];
 
@@ -295,9 +317,11 @@ final class DatabaseSchemaService
                 continue;
             }
 
-            $views[$viewName] = [
-                'sql' => $view->getSql(),
-            ];
+            $views[$viewName] = ['type' => 'view'];
+
+            if ($includeDefinitions) {
+                $views[$viewName]['definition'] = $view->getSql();
+            }
         }
 
         return $views;
@@ -323,7 +347,7 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getStoredProceduresStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
+    private function getStoredProceduresStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $structures = [];
 
@@ -331,7 +355,17 @@ final class DatabaseSchemaService
             if (!$this->matchesFilter($proc, $filter, $matchMode)) {
                 continue;
             }
-            $structures[$proc] = ['type' => 'procedure'];
+
+            $details = ['type' => 'procedure'];
+
+            if ($includeDefinitions) {
+                $definition = $schemaInspector->getStoredProcedureDefinition($conn, $proc);
+                if (null !== $definition && '' !== trim($definition)) {
+                    $details['definition'] = $definition;
+                }
+            }
+
+            $structures[$proc] = $details;
         }
 
         return $structures;
@@ -356,7 +390,7 @@ final class DatabaseSchemaService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function getFunctionsStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode): array
+    private function getFunctionsStructure(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, string $filter, string $matchMode, bool $includeDefinitions): array
     {
         $structures = [];
 
@@ -364,7 +398,17 @@ final class DatabaseSchemaService
             if (!$this->matchesFilter($func, $filter, $matchMode)) {
                 continue;
             }
-            $structures[$func] = ['type' => 'function'];
+
+            $details = ['type' => 'function'];
+
+            if ($includeDefinitions) {
+                $definition = $schemaInspector->getFunctionDefinition($conn, $func);
+                if (null !== $definition && '' !== trim($definition)) {
+                    $details['definition'] = $definition;
+                }
+            }
+
+            $structures[$func] = $details;
         }
 
         return $structures;
@@ -477,16 +521,256 @@ final class DatabaseSchemaService
             return true;
         }
 
-        $normalizedName = strtolower(trim($objectName, '"\' '));
-        $normalizedFilter = strtolower(trim($filter));
+        $normalizedName = $this->normalizeFilterTarget($objectName);
+        $normalizedFilter = $this->normalizeFilterTarget($filter);
         $normalizedMode = $this->normalizeMatchMode($matchMode);
 
         return match ($normalizedMode) {
-            SchemaMatchMode::PREFIX->value => str_starts_with($normalizedName, $normalizedFilter),
-            SchemaMatchMode::EXACT->value => $normalizedName === $normalizedFilter,
-            SchemaMatchMode::GLOB->value => fnmatch($normalizedFilter, $normalizedName),
-            default => str_contains($normalizedName, $normalizedFilter),
+            SchemaMatchMode::PREFIX->value => $this->matchesPrefix($normalizedName, $normalizedFilter),
+            SchemaMatchMode::EXACT->value => $this->matchesExact($normalizedName, $normalizedFilter),
+            SchemaMatchMode::GLOB->value => $this->matchesGlob($normalizedName, $normalizedFilter),
+            default => $this->matchesContains($normalizedName, $normalizedFilter),
         };
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesPrefix(array $name, array $filter): bool
+    {
+        return str_starts_with($name['canonical'], $filter['canonical'])
+            || str_starts_with($name['leaf'], $filter['leaf']);
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesExact(array $name, array $filter): bool
+    {
+        return $name['canonical'] === $filter['canonical']
+            || $name['leaf'] === $filter['leaf'];
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesGlob(array $name, array $filter): bool
+    {
+        return fnmatch($filter['canonical'], $name['canonical'])
+            || fnmatch($filter['leaf'], $name['leaf']);
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string} $name
+     * @param array{canonical: string, leaf: string} $filter
+     */
+    private function matchesContains(array $name, array $filter): bool
+    {
+        return str_contains($name['canonical'], $filter['canonical'])
+            || str_contains($name['leaf'], $filter['leaf']);
+    }
+
+    /**
+     * @return array{canonical: string, leaf: string}
+     */
+    private function normalizeFilterTarget(string $value): array
+    {
+        $trimmedValue = trim($value);
+        $parts = preg_split('/\s*\.\s*/', $trimmedValue);
+        if (false === $parts || [] === $parts) {
+            $normalized = $this->normalizeIdentifier($trimmedValue);
+
+            return [
+                'canonical' => $normalized,
+                'leaf' => $normalized,
+            ];
+        }
+
+        $normalizedParts = [];
+        foreach ($parts as $part) {
+            $normalizedPart = $this->normalizeIdentifier($part);
+            if ('' === $normalizedPart) {
+                continue;
+            }
+
+            $normalizedParts[] = $normalizedPart;
+        }
+
+        if ([] === $normalizedParts) {
+            $normalized = $this->normalizeIdentifier($trimmedValue);
+
+            return [
+                'canonical' => $normalized,
+                'leaf' => $normalized,
+            ];
+        }
+
+        $canonical = implode('.', $normalizedParts);
+
+        return [
+            'canonical' => $canonical,
+            'leaf' => end($normalizedParts) ?: $canonical,
+        ];
+    }
+
+    /** @param array<string, mixed> $result */
+    private function hasAnySchemaMatches(array $result): bool
+    {
+        if (isset($result['tables']) && \is_array($result['tables']) && [] !== $result['tables']) {
+            return true;
+        }
+
+        if (isset($result['views']) && \is_array($result['views']) && [] !== $result['views']) {
+            return true;
+        }
+
+        if (!isset($result['routines']) || !\is_array($result['routines'])) {
+            return false;
+        }
+
+        foreach ($result['routines'] as $routineGroup) {
+            if (\is_array($routineGroup) && [] !== $routineGroup) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildNoMatchDiagnostics(
+        Connection $conn,
+        DriverSchemaInspectorInterface $schemaInspector,
+        string $filter,
+        bool $includeViews,
+        bool $includeRoutines,
+    ): array {
+        $normalizedFilter = $this->normalizeFilterTarget($filter);
+        $candidates = $this->collectSchemaCandidates($conn, $schemaInspector, $includeViews, $includeRoutines);
+
+        return [
+            'status' => 'no_exact_match',
+            'normalized_filter' => $normalizedFilter,
+            'normalized_names_tried' => array_values(array_unique([$normalizedFilter['canonical'], $normalizedFilter['leaf']])),
+            'top_near_matches' => $this->findTopNearMatches($normalizedFilter, $candidates),
+        ];
+    }
+
+    /**
+     * @return list<array{name: string, type: string, normalized: array{canonical: string, leaf: string}}>
+     */
+    private function collectSchemaCandidates(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, bool $includeViews, bool $includeRoutines): array
+    {
+        $candidates = [];
+
+        foreach ($conn->createSchemaManager()->introspectTables() as $table) {
+            $tableName = $table->getObjectName()->toString();
+            $candidates[] = [
+                'name' => $tableName,
+                'type' => 'table',
+                'normalized' => $this->normalizeFilterTarget($tableName),
+            ];
+        }
+
+        if ($includeViews) {
+            foreach ($conn->createSchemaManager()->introspectViews() as $view) {
+                $viewName = $view->getObjectName()->toString();
+                $candidates[] = [
+                    'name' => $viewName,
+                    'type' => 'view',
+                    'normalized' => $this->normalizeFilterTarget($viewName),
+                ];
+            }
+        }
+
+        if ($includeRoutines) {
+            foreach ($schemaInspector->getStoredProcedures($conn) as $procedureName) {
+                $candidates[] = [
+                    'name' => $procedureName,
+                    'type' => 'procedure',
+                    'normalized' => $this->normalizeFilterTarget($procedureName),
+                ];
+            }
+
+            foreach ($schemaInspector->getFunctions($conn) as $functionName) {
+                $candidates[] = [
+                    'name' => $functionName,
+                    'type' => 'function',
+                    'normalized' => $this->normalizeFilterTarget($functionName),
+                ];
+            }
+
+            foreach ($schemaInspector->getTriggers($conn) as $triggerName) {
+                $candidates[] = [
+                    'name' => $triggerName,
+                    'type' => 'trigger',
+                    'normalized' => $this->normalizeFilterTarget($triggerName),
+                ];
+            }
+
+            try {
+                foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+                    $sequenceName = $sequence->getObjectName()->toString();
+                    $candidates[] = [
+                        'name' => $sequenceName,
+                        'type' => 'sequence',
+                        'normalized' => $this->normalizeFilterTarget($sequenceName),
+                    ];
+                }
+            } catch (\Exception) {
+                // Platform might not support sequences.
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param array{canonical: string, leaf: string}                                                      $normalizedFilter
+     * @param list<array{name: string, type: string, normalized: array{canonical: string, leaf: string}}> $candidates
+     *
+     * @return list<array{name: string, type: string, normalized_name: string}>
+     */
+    private function findTopNearMatches(array $normalizedFilter, array $candidates): array
+    {
+        $scored = [];
+
+        foreach ($candidates as $candidate) {
+            $score = min(
+                levenshtein($normalizedFilter['canonical'], $candidate['normalized']['canonical']),
+                levenshtein($normalizedFilter['leaf'], $candidate['normalized']['leaf']),
+            );
+
+            $scored[] = [
+                'name' => $candidate['name'],
+                'type' => $candidate['type'],
+                'normalized_name' => $candidate['normalized']['canonical'],
+                'score' => $score,
+            ];
+        }
+
+        usort(
+            $scored,
+            static fn (array $left, array $right): int => $left['score'] <=> $right['score']
+                ?: strcmp((string) $left['type'], (string) $right['type'])
+                ?: strcmp((string) $left['name'], (string) $right['name']),
+        );
+
+        $topMatches = \array_slice($scored, 0, 5);
+
+        return array_map(
+            static fn (array $match): array => [
+                'name' => (string) $match['name'],
+                'type' => (string) $match['type'],
+                'normalized_name' => (string) $match['normalized_name'],
+            ],
+            $topMatches,
+        );
     }
 
     /**
@@ -535,5 +819,29 @@ final class DatabaseSchemaService
             $triggers,
             fn (array $trigger): bool => $this->matchesFilter((string) ($trigger['name'] ?? ''), $filter, $matchMode),
         ));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $triggers
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function enrichTriggersWithDefinitions(Connection $conn, DriverSchemaInspectorInterface $schemaInspector, array $triggers): array
+    {
+        return array_map(static function (array $trigger) use ($conn, $schemaInspector): array {
+            $triggerName = $trigger['name'] ?? null;
+            if (!\is_string($triggerName) || '' === trim($triggerName)) {
+                return $trigger;
+            }
+
+            $definition = $schemaInspector->getTriggerDefinition($conn, $triggerName);
+            if (null === $definition || '' === trim($definition)) {
+                return $trigger;
+            }
+
+            $trigger['definition'] = $definition;
+
+            return $trigger;
+        }, $triggers);
     }
 }
