@@ -30,15 +30,15 @@ START HERE - REQUIRED DISCOVERY FLOW:
 - Before querying information_schema/system catalogs for metadata/definitions, try
   database_schema with detail="full" (and includeRoutines/includeViews when needed).
 
-CRITICAL - ROW LIMIT:
-- ALWAYS use exactly 10 rows by default. Never use 20, 50, or 100.
-- MySQL/PostgreSQL/SQLite: Use LIMIT 10
-- SQL Server: Use TOP 10 (LIMIT does not work in SQL Server!)
+ROW LIMIT:
+- Default to LIMIT 10 when browsing or exploring data. Use TOP 10 on SQL Server.
+- Use a larger LIMIT or TOP only when the task requires a specific known row count, such as 31 daily buckets.
+- Keep the limit as small as the task allows.
 
 RULES:
-1. SELECT without WHERE MUST have LIMIT or TOP - queries will be rejected otherwise.
+1. SELECT without WHERE requires LIMIT or TOP, except for aggregate-only queries without GROUP BY, such as SELECT COUNT(*) FROM users.
 2. Check the connection type before writing the query - use correct syntax for that database.
-3. For more rows, use pagination with OFFSET.
+3. To browse beyond the first page, use pagination with OFFSET.
 4. Large text columns (>200 chars) are truncated to "<TEXT>" in multi-row results. To view full text, Query MUST return exactly 1 row.
 
 Examples:
