@@ -58,10 +58,10 @@ YAML);
 
         $this->connection = $loader->getConnection('local');
         $schemaInspectorFactory = new SchemaInspectorFactory(
-            new MysqlSchemaInspector($logger),
-            new PostgreSqlSchemaInspector($logger),
-            new SqliteSchemaInspector($logger),
-            new SqlServerSchemaInspector($logger),
+            new MysqlSchemaInspector(),
+            new PostgreSqlSchemaInspector(),
+            new SqliteSchemaInspector(),
+            new SqlServerSchemaInspector(),
         );
         $schemaService = new DatabaseSchemaService(new ArrayAdapter(), $schemaInspectorFactory);
         $this->schemaTool = new SchemaTool($schemaService, $loader, $logger);

@@ -12,7 +12,12 @@ use App\Service\Schema\SchemaInspectorFactory;
 use App\Service\Schema\SqliteSchemaInspector;
 use App\Service\Schema\SqlServerSchemaInspector;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Driver\PDO\Exception as PdoException;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Exception\ConnectionException;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Result;
+use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -39,10 +44,10 @@ final class DatabaseSchemaServiceTest extends TestCase
 
         $logger = new NullLogger();
         $schemaInspectorFactory = new SchemaInspectorFactory(
-            new MysqlSchemaInspector($logger),
-            new PostgreSqlSchemaInspector($logger),
-            new SqliteSchemaInspector($logger),
-            new SqlServerSchemaInspector($logger),
+            new MysqlSchemaInspector(),
+            new PostgreSqlSchemaInspector(),
+            new SqliteSchemaInspector(),
+            new SqlServerSchemaInspector(),
         );
 
         $this->service = new DatabaseSchemaService(new ArrayAdapter(), $schemaInspectorFactory);
@@ -63,6 +68,117 @@ final class DatabaseSchemaServiceTest extends TestCase
 
         $this->assertSame('summary', $result['detail']);
         $this->assertEqualsCanonicalizing(['users', 'user_profiles'], $this->normalizeObjectNames($result['tables']));
+    }
+
+    public function testRoutinesRecoveryRethrowsInspectorConnectionFailure(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('getParams')->willReturn(['driver' => 'pdo_pgsql']);
+        $procedures = $this->createStub(Result::class);
+        $functions = $this->createStub(Result::class);
+        $procedures->method('fetchAllAssociative')->willReturn([['routine_name' => 'refresh_users']]);
+        $functions->method('fetchAllAssociative')->willReturn([['routine_name' => 'format_user']]);
+
+        $connection->expects($this->exactly(3))
+            ->method('executeQuery')
+            ->willReturnOnConsecutiveCalls(
+                $this->throwException(new ConnectionException(new PdoException('Connection failed', '08006'), null)),
+                $procedures,
+                $functions,
+            );
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $this->assertSame([
+            'stored_procedures' => ['refresh_users'],
+            'functions' => ['format_user'],
+        ], $this->service->getRoutinesList($connection));
+    }
+
+    public function testSchemaPermissionFailurePropagatesWithoutRetry(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('getParams')->willReturn(['driver' => 'pdo_pgsql']);
+        $schemaManager = $this->createStub(AbstractSchemaManager::class);
+        $schemaManager->method('introspectTables')->willReturn([]);
+        $schemaManager->method('introspectSequences')->willReturn([]);
+        $connection->method('createSchemaManager')->willReturn($schemaManager);
+        $connection->expects($this->once())
+            ->method('executeQuery')
+            ->willThrowException(new \RuntimeException('permission denied for relation pg_proc'));
+        $connection->expects($this->never())->method('close');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('permission denied');
+
+        $this->service->getSchemaStructure('users', $connection, 'pgsql', '', 'full', 'contains', false, true);
+    }
+
+    public function testSchemaRetriesWhenSequenceIntrospectionFindsStaleConnection(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('getParams')->willReturn(['driver' => 'pdo_sqlite']);
+        $platform = $this->createStub(AbstractPlatform::class);
+        $platform->method('supportsSequences')->willReturn(true);
+        $connection->method('getDatabasePlatform')->willReturn($platform);
+        $firstTables = $this->createMock(AbstractSchemaManager::class);
+        $staleSequences = $this->createMock(AbstractSchemaManager::class);
+        $reconnectedTables = $this->createMock(AbstractSchemaManager::class);
+        $reconnectedSequences = $this->createMock(AbstractSchemaManager::class);
+
+        $firstTables->expects($this->once())
+            ->method('introspectTables')
+            ->willReturn([]);
+
+        $staleSequences->expects($this->once())
+            ->method('introspectSequences')
+            ->willThrowException(new ConnectionException(new PdoException('Connection failed', '08006'), null));
+
+        $reconnectedTables->expects($this->once())
+            ->method('introspectTables')
+            ->willReturn([]);
+
+        $reconnectedSequences->expects($this->once())
+            ->method('introspectSequences')
+            ->willReturn([]);
+
+        $connection->expects($this->exactly(4))
+            ->method('createSchemaManager')
+            ->willReturnOnConsecutiveCalls($firstTables, $staleSequences, $reconnectedTables, $reconnectedSequences);
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $schema = $this->service->getSchemaStructure(
+            'local',
+            $connection,
+            'pdo_sqlite',
+            '',
+            'full',
+            'contains',
+            false,
+            true,
+        );
+
+        $this->assertSame([], $schema['routines']['sequences']);
+    }
+
+    public function testSchemaSkipsSequencesWhenThePlatformDoesNotSupportThem(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('getParams')->willReturn(['driver' => 'pdo_sqlite']);
+        $platform = $this->createStub(AbstractPlatform::class);
+        $platform->method('supportsSequences')->willReturn(false);
+        $connection->method('getDatabasePlatform')->willReturn($platform);
+        $schemaManager = $this->createMock(AbstractSchemaManager::class);
+        $schemaManager->expects($this->once())->method('introspectTables')->willReturn([]);
+        $schemaManager->expects($this->never())->method('introspectSequences');
+        $connection->method('createSchemaManager')->willReturn($schemaManager);
+
+        $schema = $this->service->getSchemaStructure('local', $connection, 'sqlite', '', 'full', 'contains', false, true);
+
+        $this->assertSame([], $schema['routines']['sequences']);
     }
 
     public function testExactMatchModeReturnsSingleExactName(): void

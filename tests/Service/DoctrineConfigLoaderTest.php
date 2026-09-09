@@ -6,6 +6,10 @@ namespace App\Tests\Service;
 
 use App\Exception\ToolUsageError;
 use App\Service\DoctrineConfigLoader;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Driver\Exception as DriverException;
+use Doctrine\DBAL\Exception\ConnectionException;
+use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -253,7 +257,7 @@ YAML;
         $loader->loadAndValidate();
 
         $connection = $loader->getConnection('test');
-        $this->assertInstanceOf(\Doctrine\DBAL\Connection::class, $connection);
+        $this->assertInstanceOf(Connection::class, $connection);
         $this->assertSame('pdo_sqlite', $loader->getConnectionType('test'));
 
         // Test with driverOptions
@@ -274,7 +278,43 @@ YAML;
         $loader2->loadAndValidate();
 
         $connection2 = $loader2->getConnection('test2');
-        $this->assertInstanceOf(\Doctrine\DBAL\Connection::class, $connection2);
+        $this->assertInstanceOf(Connection::class, $connection2);
         $this->assertSame('pdo_sqlite', $loader2->getConnectionType('test2'));
+    }
+
+    public function testGetTableNamesRetriesAfterBrokenConnection(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $brokenSchemaManager = $this->createMock(AbstractSchemaManager::class);
+        $reconnectedSchemaManager = $this->createMock(AbstractSchemaManager::class);
+
+        $brokenSchemaManager->expects($this->once())
+            ->method('listTableNames')
+            ->willThrowException(new ConnectionException($this->createStub(DriverException::class), null));
+
+        $reconnectedSchemaManager->expects($this->once())
+            ->method('listTableNames')
+            ->willReturn(['users']);
+
+        $connection->expects($this->exactly(2))
+            ->method('createSchemaManager')
+            ->willReturnOnConsecutiveCalls($brokenSchemaManager, $reconnectedSchemaManager);
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $loader = new DoctrineConfigLoader($this->logger);
+        $connections = new \ReflectionProperty($loader, 'connections');
+        $connections->setValue($loader, [
+            'test' => [
+                'name' => 'test',
+                'type' => 'pdo_sqlite',
+                'version' => null,
+                'pii_enabled' => false,
+                'connection' => $connection,
+            ],
+        ]);
+
+        $this->assertSame(['users'], $loader->getTableNames('test'));
     }
 }

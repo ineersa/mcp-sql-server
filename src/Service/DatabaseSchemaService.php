@@ -52,20 +52,22 @@ final class DatabaseSchemaService
             (int) $shouldIncludeDefinitions,
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
-            $item->expiresAfter(60);
+        return StaleConnectionRetryer::execute($conn, function () use ($cacheKey, $conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector): array {
+            return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
+                $item->expiresAfter(60);
 
-            return $this->buildSchemaStructure(
-                $conn,
-                $engineName,
-                $schemaInspector,
-                $filter,
-                $normalizedDetail,
-                $normalizedMatchMode,
-                $shouldIncludeViews,
-                $shouldIncludeRoutines,
-                $shouldIncludeDefinitions,
-            );
+                return $this->buildSchemaStructure(
+                    $conn,
+                    $engineName,
+                    $schemaInspector,
+                    $filter,
+                    $normalizedDetail,
+                    $normalizedMatchMode,
+                    $shouldIncludeViews,
+                    $shouldIncludeRoutines,
+                    $shouldIncludeDefinitions,
+                );
+            });
         });
     }
 
@@ -74,12 +76,14 @@ final class DatabaseSchemaService
      */
     public function getViewsList(Connection $conn): array
     {
-        $views = [];
-        foreach ($conn->createSchemaManager()->introspectViews() as $view) {
-            $views[] = $view->getObjectName()->toString();
-        }
+        return StaleConnectionRetryer::execute($conn, static function () use ($conn): array {
+            $views = [];
+            foreach ($conn->createSchemaManager()->introspectViews() as $view) {
+                $views[] = $view->getObjectName()->toString();
+            }
 
-        return $views;
+            return $views;
+        });
     }
 
     /**
@@ -87,12 +91,14 @@ final class DatabaseSchemaService
      */
     public function getRoutinesList(Connection $conn): array
     {
-        $schemaInspector = $this->schemaInspectorFactory->create($conn);
+        return StaleConnectionRetryer::execute($conn, function () use ($conn): array {
+            $schemaInspector = $this->schemaInspectorFactory->create($conn);
 
-        return [
-            'stored_procedures' => $schemaInspector->getStoredProcedures($conn),
-            'functions' => $schemaInspector->getFunctions($conn),
-        ];
+            return [
+                'stored_procedures' => $schemaInspector->getStoredProcedures($conn),
+                'functions' => $schemaInspector->getFunctions($conn),
+            ];
+        });
     }
 
     /** @return array<string, mixed> */
@@ -451,23 +457,22 @@ final class DatabaseSchemaService
      */
     private function getSequencesStructure(Connection $conn, string $filter, string $matchMode): array
     {
+        if (!$conn->getDatabasePlatform()->supportsSequences()) {
+            return [];
+        }
+
         $sequences = [];
+        foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+            $seqName = $sequence->getObjectName()->toString();
 
-        try {
-            foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
-                $seqName = $sequence->getObjectName()->toString();
-
-                if (!$this->matchesFilter($seqName, $filter, $matchMode)) {
-                    continue;
-                }
-
-                $sequences[$seqName] = [
-                    'allocation_size' => $sequence->getAllocationSize(),
-                    'initial_value' => $sequence->getInitialValue(),
-                ];
+            if (!$this->matchesFilter($seqName, $filter, $matchMode)) {
+                continue;
             }
-        } catch (\Exception) {
-            // Platform might not support sequences
+
+            $sequences[$seqName] = [
+                'allocation_size' => $sequence->getAllocationSize(),
+                'initial_value' => $sequence->getInitialValue(),
+            ];
         }
 
         return $sequences;
@@ -476,20 +481,19 @@ final class DatabaseSchemaService
     /** @return list<string> */
     private function getSequencesNames(Connection $conn, string $filter, string $matchMode): array
     {
+        if (!$conn->getDatabasePlatform()->supportsSequences()) {
+            return [];
+        }
+
         $names = [];
+        foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+            $sequenceName = $sequence->getObjectName()->toString();
 
-        try {
-            foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
-                $sequenceName = $sequence->getObjectName()->toString();
-
-                if (!$this->matchesFilter($sequenceName, $filter, $matchMode)) {
-                    continue;
-                }
-
-                $names[] = $sequenceName;
+            if (!$this->matchesFilter($sequenceName, $filter, $matchMode)) {
+                continue;
             }
-        } catch (\Exception) {
-            // Platform might not support sequences
+
+            $names[] = $sequenceName;
         }
 
         return $names;
@@ -713,7 +717,7 @@ final class DatabaseSchemaService
                 ];
             }
 
-            try {
+            if ($conn->getDatabasePlatform()->supportsSequences()) {
                 foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
                     $sequenceName = $sequence->getObjectName()->toString();
                     $candidates[] = [
@@ -722,8 +726,6 @@ final class DatabaseSchemaService
                         'normalized' => $this->normalizeFilterTarget($sequenceName),
                     ];
                 }
-            } catch (\Exception) {
-                // Platform might not support sequences.
             }
         }
 
