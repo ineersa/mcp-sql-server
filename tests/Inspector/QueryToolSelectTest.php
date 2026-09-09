@@ -86,6 +86,19 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
         return $baseTests;
     }
 
+    public function testNormalizesOnlyConnectionVersionsInQueryToolDescription(): void
+    {
+        $output = <<<'JSON'
+{"tools":[{"name":"query","description":"Query.\nAvailable connections:\n - products : MySQL, version 8.0 [PII GUARDED]\n - users : Postgres, version 16.15 (Debian build)\n - server : SQL Server, version 2019"},{"name":"other","description":"Version 16.15"}]}
+JSON;
+
+        $expected = <<<'JSON'
+{"tools":[{"name":"query","description":"Query.\nAvailable connections:\n - products : MySQL, version <VERSION> [PII GUARDED]\n - users : Postgres, version <VERSION>\n - server : SQL Server, version <VERSION>"},{"name":"other","description":"Version 16.15"}]}
+JSON;
+
+        $this->assertSame($expected, $this->normalizeTestOutput($output));
+    }
+
     protected function getSnapshotFilePath(string $method, ?string $testName = null): string
     {
         $methodSlug = str_replace('/', '_', $method);
@@ -112,6 +125,29 @@ final class QueryToolSelectTest extends InspectorSnapshotTestCase
     protected function getTransport(): string
     {
         return 'stdio';
+    }
+
+    protected function normalizeTestOutput(string $output, ?string $testName = null): string
+    {
+        $response = json_decode($output, true);
+        if (!\is_array($response) || !isset($response['tools']) || !\is_array($response['tools'])) {
+            return $output;
+        }
+
+        foreach ($response['tools'] as &$tool) {
+            if (!\is_array($tool) || 'query' !== ($tool['name'] ?? null) || !isset($tool['description']) || !\is_string($tool['description'])) {
+                continue;
+            }
+
+            $tool['description'] = preg_replace(
+                '#(\\n - [^\\n]+ : [^,\\n]+, version )([^\\n[]+)( \\[[^\\]]+\\])?(?=\\n|$)#',
+                '$1<VERSION>$3',
+                $tool['description'],
+            ) ?? $tool['description'];
+        }
+        unset($tool);
+
+        return json_encode($response, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR);
     }
 
     private function cleanupDatabase(): void
