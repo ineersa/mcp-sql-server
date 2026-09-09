@@ -126,25 +126,66 @@ doctrine:
 
 Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop settings).
 
-### Docker Compose (Recommended)
+### Docker Compose launch configuration
+
+Use this invocation for MCP over stdio on macOS or Linux. Replace
+`/path/to/docker-compose.yaml` with your Compose file's absolute path.
+
+Use `docker` if it is available on your MCP client's `PATH`. Otherwise, run
+`command -v docker` in your terminal and use the returned absolute path instead.
+GUI clients might not inherit your terminal's `PATH`.
+
+The example passes environment variables through `/usr/bin/env`, so it does not
+require your MCP client to support an `env` block. Place the `database` entry under
+your client's server configuration key, such as `mcpServers` in Claude Desktop.
 
 ```json
 {
     "database": {
-        "command": "docker",
+        "command": "/usr/bin/env",
         "args": [
+            "COMPOSE_MENU=false",
+            "COMPOSE_PROGRESS=plain",
+            "COMPOSE_ANSI=never",
+            "COMPOSE_IGNORE_ORPHANS=true",
+            "DOCKER_CLI_HINTS=false",
+            "docker",
             "compose",
             "-f",
             "/path/to/docker-compose.yaml",
             "run",
             "--rm",
+            "--no-deps",
+            "-T",
+            "--quiet-pull",
             "database-mcp"
         ]
     }
 }
 ```
 
-### Opencode
+MCP uses stdout for JSON-RPC messages. A pseudo-TTY or interactive CLI output can
+interfere with that transport. These settings disable TTY allocation and reduce
+Compose's interactive output:
+
+| Setting | Effect |
+| --- | --- |
+| `COMPOSE_MENU=false` | Disables the Compose interactive menu. |
+| `COMPOSE_PROGRESS=plain` | Uses plain progress output instead of an interactive display. |
+| `COMPOSE_ANSI=never` | Disables ANSI formatting in Compose output. |
+| `COMPOSE_IGNORE_ORPHANS=true` | Suppresses warnings about orphan containers. |
+| `DOCKER_CLI_HINTS=false` | Disables Docker CLI hints. |
+| `-T` | Disables pseudo-TTY allocation. |
+| `--quiet-pull` | Suppresses image pull progress. |
+| `--no-deps` | Prevents Compose from starting dependency services. |
+
+If your Compose file declares database dependencies, start them separately before
+you connect the MCP client. Do not redirect stderr to stdout for this invocation.
+
+### OpenCode
+
+Use the same environment settings and Compose options in OpenCode's command array.
+Replace the Compose file path and, if needed, the Docker command as described above.
 
 ```json
 {
@@ -152,12 +193,21 @@ Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop 
         "database": {
             "type": "local",
             "command": [
+                "/usr/bin/env",
+                "COMPOSE_MENU=false",
+                "COMPOSE_PROGRESS=plain",
+                "COMPOSE_ANSI=never",
+                "COMPOSE_IGNORE_ORPHANS=true",
+                "DOCKER_CLI_HINTS=false",
                 "docker",
                 "compose",
                 "-f",
                 "/path/to/docker-compose.yaml",
                 "run",
                 "--rm",
+                "--no-deps",
+                "-T",
+                "--quiet-pull",
                 "database-mcp"
             ],
             "enabled": true
@@ -188,7 +238,9 @@ Verify your configuration works:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | \
-docker compose run --rm database-mcp
+env COMPOSE_MENU=false COMPOSE_PROGRESS=plain COMPOSE_ANSI=never \
+    COMPOSE_IGNORE_ORPHANS=true DOCKER_CLI_HINTS=false \
+    docker compose run --rm --no-deps -T --quiet-pull database-mcp
 ```
 
 You should see a JSON response with server capabilities.
