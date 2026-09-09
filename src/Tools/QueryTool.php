@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tools;
 
 use App\Exception\ToolUsageError;
+use App\Service\ConnectionFailure;
 use App\Service\DoctrineConfigLoader;
 use App\Service\PIIAnalyzerService;
 use App\Service\SafeQueryExecutor;
@@ -390,6 +391,15 @@ DESCRIPTION;
     {
         if ($error instanceof ToolUsageError) {
             return $error;
+        }
+
+        if (ConnectionFailure::matches($error)) {
+            return new ToolUsageError(
+                message: $error->getMessage(),
+                hint: 'Database connection failed. Do not change the SQL to fix this connection error. Check database availability and connection settings, then reconnect the MCP server before trying again.',
+                retryable: false,
+                previous: $error,
+            );
         }
 
         if ($error instanceof DbalException) {
