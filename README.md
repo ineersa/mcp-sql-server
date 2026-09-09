@@ -367,9 +367,9 @@ Docker images include the [GLiNER PII ONNX model](https://huggingface.co/ineersa
 and tokenizer at `/app/models`. PII detection needs no model download or Hugging
 Face access at runtime. The bundled files add about 1.8 GB before image compression.
 
-When upgrading an existing Docker setup, remove the `./models:/app/models:ro`
-volume mount and the `download-models` service from your Compose file. The old
-mount hides the bundled files, even if the host directory is empty.
+For an existing Docker setup, follow the [upgrade guide](UPGRADE.md#upgrade-to-v0016)
+to remove the old model mount and download service. The old mount hides the bundled
+files, even if the host directory is empty.
 
 To use a custom compatible GLiNER ONNX model, mount its directory and set
 `pii.tokenizer_path` and `pii.model_path` to the container paths.
