@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Service\SafeQueryExecutor;
-use App\Service\StaleConnectionRetryer;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDO\Exception as PdoException;
 use Doctrine\DBAL\Exception\ConnectionException;
@@ -202,12 +201,6 @@ final class SafeQueryExecutorTest extends TestCase
             ->method('rollBack');
 
         $this->assertSame([['value' => 1]], $this->executor->execute($connection, 'SELECT 1'));
-    }
-
-    public function testClassifiesSqlState08AndCaseInsensitiveMessagesAsStale(): void
-    {
-        $this->assertTrue(StaleConnectionRetryer::isStaleConnection(new PdoException('Connection failed', '08006')));
-        $this->assertTrue(StaleConnectionRetryer::isStaleConnection(new \RuntimeException('SERVER HAS GONE AWAY')));
     }
 
     public function testDoesNotRetryMoreThanOnce(): void

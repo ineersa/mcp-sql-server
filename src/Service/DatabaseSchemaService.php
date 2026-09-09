@@ -457,27 +457,22 @@ final class DatabaseSchemaService
      */
     private function getSequencesStructure(Connection $conn, string $filter, string $matchMode): array
     {
+        if (!$conn->getDatabasePlatform()->supportsSequences()) {
+            return [];
+        }
+
         $sequences = [];
+        foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+            $seqName = $sequence->getObjectName()->toString();
 
-        try {
-            foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
-                $seqName = $sequence->getObjectName()->toString();
-
-                if (!$this->matchesFilter($seqName, $filter, $matchMode)) {
-                    continue;
-                }
-
-                $sequences[$seqName] = [
-                    'allocation_size' => $sequence->getAllocationSize(),
-                    'initial_value' => $sequence->getInitialValue(),
-                ];
-            }
-        } catch (\Exception $exception) {
-            if (StaleConnectionRetryer::isStaleConnection($exception)) {
-                throw $exception;
+            if (!$this->matchesFilter($seqName, $filter, $matchMode)) {
+                continue;
             }
 
-            // Platform might not support sequences
+            $sequences[$seqName] = [
+                'allocation_size' => $sequence->getAllocationSize(),
+                'initial_value' => $sequence->getInitialValue(),
+            ];
         }
 
         return $sequences;
@@ -486,24 +481,19 @@ final class DatabaseSchemaService
     /** @return list<string> */
     private function getSequencesNames(Connection $conn, string $filter, string $matchMode): array
     {
+        if (!$conn->getDatabasePlatform()->supportsSequences()) {
+            return [];
+        }
+
         $names = [];
+        foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
+            $sequenceName = $sequence->getObjectName()->toString();
 
-        try {
-            foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
-                $sequenceName = $sequence->getObjectName()->toString();
-
-                if (!$this->matchesFilter($sequenceName, $filter, $matchMode)) {
-                    continue;
-                }
-
-                $names[] = $sequenceName;
-            }
-        } catch (\Exception $exception) {
-            if (StaleConnectionRetryer::isStaleConnection($exception)) {
-                throw $exception;
+            if (!$this->matchesFilter($sequenceName, $filter, $matchMode)) {
+                continue;
             }
 
-            // Platform might not support sequences
+            $names[] = $sequenceName;
         }
 
         return $names;
@@ -727,7 +717,7 @@ final class DatabaseSchemaService
                 ];
             }
 
-            try {
+            if ($conn->getDatabasePlatform()->supportsSequences()) {
                 foreach ($conn->createSchemaManager()->introspectSequences() as $sequence) {
                     $sequenceName = $sequence->getObjectName()->toString();
                     $candidates[] = [
@@ -736,12 +726,6 @@ final class DatabaseSchemaService
                         'normalized' => $this->normalizeFilterTarget($sequenceName),
                     ];
                 }
-            } catch (\Exception $exception) {
-                if (StaleConnectionRetryer::isStaleConnection($exception)) {
-                    throw $exception;
-                }
-
-                // Platform might not support sequences.
             }
         }
 

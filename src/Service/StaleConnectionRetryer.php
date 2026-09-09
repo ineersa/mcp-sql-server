@@ -36,7 +36,7 @@ final class StaleConnectionRetryer
         }
     }
 
-    public static function isStaleConnection(\Throwable $exception): bool
+    private static function isStaleConnection(\Throwable $exception): bool
     {
         for ($current = $exception; null !== $current; $current = $current->getPrevious()) {
             if ($current instanceof ConnectionException
