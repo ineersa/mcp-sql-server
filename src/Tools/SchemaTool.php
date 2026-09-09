@@ -7,6 +7,7 @@ namespace App\Tools;
 use App\Enum\SchemaDetail;
 use App\Enum\SchemaMatchMode;
 use App\Exception\ToolUsageError;
+use App\Service\ConnectionFailure;
 use App\Service\DatabaseSchemaService;
 use App\Service\DoctrineConfigLoader;
 use Doctrine\DBAL\Exception as DbalException;
@@ -163,6 +164,15 @@ DESCRIPTION;
     {
         if ($error instanceof ToolUsageError) {
             return $error;
+        }
+
+        if (ConnectionFailure::matches($error)) {
+            return new ToolUsageError(
+                message: $error->getMessage(),
+                hint: 'Database connection failed. Do not change schema arguments to fix this connection error. Check database availability and connection settings, then reconnect the MCP server before trying again.',
+                retryable: false,
+                previous: $error,
+            );
         }
 
         if ($error instanceof DbalException) {
