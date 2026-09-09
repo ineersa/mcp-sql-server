@@ -120,26 +120,30 @@ final class DoctrineConfigLoader
     public function getTableNames(string $connectionName): array
     {
         $connection = $this->getConnection($connectionName);
-        $schemaManager = $connection->createSchemaManager();
 
-        return $schemaManager->listTableNames();
+        return StaleConnectionRetryer::execute($connection, static function () use ($connection): array {
+            return $connection->createSchemaManager()->listTableNames();
+        });
     }
 
     public function getCreateTableSql(string $connectionName, string $tableName): string
     {
         $connection = $this->getConnection($connectionName);
-        $schemaManager = $connection->createSchemaManager();
-        $platform = $connection->getDatabasePlatform();
 
-        $tables = $schemaManager->listTableNames();
-        if (!\in_array($tableName, $tables, true)) {
-            throw new ToolUsageError(message: \sprintf('Table "%s" does not exist in connection "%s".', $tableName, $connectionName), hint: 'Read the connection resource first to list tables, then use an existing table name.', retryable: false);
-        }
+        return StaleConnectionRetryer::execute($connection, static function () use ($connection, $connectionName, $tableName): string {
+            $schemaManager = $connection->createSchemaManager();
+            $platform = $connection->getDatabasePlatform();
 
-        $table = $schemaManager->introspectTable($tableName);
-        $createTableSql = $platform->getCreateTableSQL($table);
+            $tables = $schemaManager->listTableNames();
+            if (!\in_array($tableName, $tables, true)) {
+                throw new ToolUsageError(message: \sprintf('Table "%s" does not exist in connection "%s".', $tableName, $connectionName), hint: 'Read the connection resource first to list tables, then use an existing table name.', retryable: false);
+            }
 
-        return implode(";\n", $createTableSql).';';
+            $table = $schemaManager->introspectTable($tableName);
+            $createTableSql = $platform->getCreateTableSQL($table);
+
+            return implode(";\n", $createTableSql).';';
+        });
     }
 
     public function getThreshold(): float

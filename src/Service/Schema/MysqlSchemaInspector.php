@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Schema;
 
+use App\Service\StaleConnectionRetryer;
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 
@@ -24,6 +25,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractObjectNames($rows, 'Name');
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get stored procedures', ['error' => $e->getMessage()]);
 
             return [];
@@ -38,6 +43,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractObjectNames($rows, 'Name');
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get functions', ['error' => $e->getMessage()]);
 
             return [];
@@ -52,6 +61,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractObjectNames($rows, 'name');
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get triggers list', ['error' => $e->getMessage()]);
 
             return [];
@@ -69,6 +82,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
                 [$tableName]
             )->fetchAllAssociative();
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get triggers', ['table' => $tableName, 'error' => $e->getMessage()]);
 
             return [];
@@ -91,6 +108,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
                 [$tableName]
             )->fetchAllAssociative();
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get check constraints', ['table' => $tableName, 'error' => $e->getMessage()]);
 
             return [];
@@ -109,6 +130,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractDefinitionValue($row, ['Create Procedure']);
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get stored procedure definition', ['procedure' => $procedureName, 'error' => $e->getMessage()]);
 
             return null;
@@ -127,6 +152,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractDefinitionValue($row, ['Create Function']);
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get function definition', ['function' => $functionName, 'error' => $e->getMessage()]);
 
             return null;
@@ -145,6 +174,10 @@ final class MysqlSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractDefinitionValue($row, ['SQL Original Statement', 'Statement', 'Create Trigger']);
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
 
             return null;

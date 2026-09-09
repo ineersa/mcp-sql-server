@@ -52,20 +52,22 @@ final class DatabaseSchemaService
             (int) $shouldIncludeDefinitions,
         );
 
-        return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
-            $item->expiresAfter(60);
+        return StaleConnectionRetryer::execute($conn, function () use ($cacheKey, $conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector): array {
+            return $this->cache->get($cacheKey, function (ItemInterface $item) use ($conn, $engineName, $filter, $normalizedDetail, $normalizedMatchMode, $shouldIncludeViews, $shouldIncludeRoutines, $shouldIncludeDefinitions, $schemaInspector) {
+                $item->expiresAfter(60);
 
-            return $this->buildSchemaStructure(
-                $conn,
-                $engineName,
-                $schemaInspector,
-                $filter,
-                $normalizedDetail,
-                $normalizedMatchMode,
-                $shouldIncludeViews,
-                $shouldIncludeRoutines,
-                $shouldIncludeDefinitions,
-            );
+                return $this->buildSchemaStructure(
+                    $conn,
+                    $engineName,
+                    $schemaInspector,
+                    $filter,
+                    $normalizedDetail,
+                    $normalizedMatchMode,
+                    $shouldIncludeViews,
+                    $shouldIncludeRoutines,
+                    $shouldIncludeDefinitions,
+                );
+            });
         });
     }
 
@@ -74,12 +76,14 @@ final class DatabaseSchemaService
      */
     public function getViewsList(Connection $conn): array
     {
-        $views = [];
-        foreach ($conn->createSchemaManager()->introspectViews() as $view) {
-            $views[] = $view->getObjectName()->toString();
-        }
+        return StaleConnectionRetryer::execute($conn, static function () use ($conn): array {
+            $views = [];
+            foreach ($conn->createSchemaManager()->introspectViews() as $view) {
+                $views[] = $view->getObjectName()->toString();
+            }
 
-        return $views;
+            return $views;
+        });
     }
 
     /**
@@ -87,12 +91,14 @@ final class DatabaseSchemaService
      */
     public function getRoutinesList(Connection $conn): array
     {
-        $schemaInspector = $this->schemaInspectorFactory->create($conn);
+        return StaleConnectionRetryer::execute($conn, function () use ($conn): array {
+            $schemaInspector = $this->schemaInspectorFactory->create($conn);
 
-        return [
-            'stored_procedures' => $schemaInspector->getStoredProcedures($conn),
-            'functions' => $schemaInspector->getFunctions($conn),
-        ];
+            return [
+                'stored_procedures' => $schemaInspector->getStoredProcedures($conn),
+                'functions' => $schemaInspector->getFunctions($conn),
+            ];
+        });
     }
 
     /** @return array<string, mixed> */
@@ -466,7 +472,11 @@ final class DatabaseSchemaService
                     'initial_value' => $sequence->getInitialValue(),
                 ];
             }
-        } catch (\Exception) {
+        } catch (\Exception $exception) {
+            if (StaleConnectionRetryer::isStaleConnection($exception)) {
+                throw $exception;
+            }
+
             // Platform might not support sequences
         }
 
@@ -488,7 +498,11 @@ final class DatabaseSchemaService
 
                 $names[] = $sequenceName;
             }
-        } catch (\Exception) {
+        } catch (\Exception $exception) {
+            if (StaleConnectionRetryer::isStaleConnection($exception)) {
+                throw $exception;
+            }
+
             // Platform might not support sequences
         }
 
@@ -722,7 +736,11 @@ final class DatabaseSchemaService
                         'normalized' => $this->normalizeFilterTarget($sequenceName),
                     ];
                 }
-            } catch (\Exception) {
+            } catch (\Exception $exception) {
+                if (StaleConnectionRetryer::isStaleConnection($exception)) {
+                    throw $exception;
+                }
+
                 // Platform might not support sequences.
             }
         }

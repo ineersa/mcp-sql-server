@@ -48,19 +48,32 @@ final class SafeQueryExecutor
     {
         $this->validateSql($sql);
 
-        // This catches any "logic writes" (e.g., SELECT triggering side-effect functions)
-        $conn->beginTransaction();
-        try {
-            $stmt = $conn->executeQuery($sql);
-            $results = $stmt->fetchAllAssociative();
-        } finally {
-            // Always rollback, even on success
-            if ($conn->isTransactionActive()) {
-                $conn->rollBack();
-            }
-        }
+        return StaleConnectionRetryer::execute($conn, static function () use ($conn, $sql): array {
+            $queryException = null;
 
-        return $results;
+            try {
+                // This catches any "logic writes" (e.g., SELECT triggering side-effect functions)
+                $conn->beginTransaction();
+                $stmt = $conn->executeQuery($sql);
+
+                return $stmt->fetchAllAssociative();
+            } catch (\Throwable $exception) {
+                $queryException = $exception;
+
+                throw $exception;
+            } finally {
+                // Always rollback, even on success.
+                try {
+                    if ($conn->isTransactionActive()) {
+                        $conn->rollBack();
+                    }
+                } catch (\Throwable $rollbackException) {
+                    if (null === $queryException) {
+                        throw $rollbackException;
+                    }
+                }
+            }
+        });
     }
 
     private function validateSql(string $sql): void

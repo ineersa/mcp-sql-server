@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Schema;
 
+use App\Service\StaleConnectionRetryer;
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 
@@ -36,6 +37,10 @@ final class SqliteSchemaInspector implements DriverSchemaInspectorInterface
 
             return $this->extractObjectNames($rows, 'name');
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get triggers list', ['error' => $e->getMessage()]);
 
             return [];
@@ -51,6 +56,10 @@ final class SqliteSchemaInspector implements DriverSchemaInspectorInterface
                 [$tableName]
             )->fetchAllAssociative();
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get triggers', ['table' => $tableName, 'error' => $e->getMessage()]);
 
             return [];
@@ -83,6 +92,10 @@ final class SqliteSchemaInspector implements DriverSchemaInspectorInterface
 
             return \is_string($definition) ? $definition : null;
         } catch (\Throwable $e) {
+            if (StaleConnectionRetryer::isStaleConnection($e)) {
+                throw $e;
+            }
+
             $this->logger->warning('Failed to get trigger definition', ['trigger' => $triggerName, 'error' => $e->getMessage()]);
 
             return null;

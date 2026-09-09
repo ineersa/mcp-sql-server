@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Service\SafeQueryExecutor;
+use App\Service\StaleConnectionRetryer;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Driver\PDO\Exception as PdoException;
+use Doctrine\DBAL\Exception\ConnectionException;
 use Doctrine\DBAL\Result;
 use PHPUnit\Framework\TestCase;
 
@@ -129,6 +132,125 @@ final class SafeQueryExecutorTest extends TestCase
             ->method('rollBack');
 
         $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Query error');
+
+        $this->executor->execute($connection, 'SELECT 1');
+    }
+
+    public function testRetriesOnceAfterBrokenConnection(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $result = $this->createStub(Result::class);
+        $attempt = 0;
+        $result->method('fetchAllAssociative')->willReturn([['value' => 1]]);
+
+        $connection->expects($this->exactly(2))
+            ->method('beginTransaction')
+            ->willReturnCallback(static function () use (&$attempt): void {
+                ++$attempt;
+                if (1 === $attempt) {
+                    throw new \RuntimeException('SSL SYSCALL error: EOF detected');
+                }
+            });
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $connection->expects($this->once())
+            ->method('executeQuery')
+            ->with('SELECT 1')
+            ->willReturn($result);
+
+        $connection->expects($this->exactly(2))
+            ->method('isTransactionActive')
+            ->willReturnOnConsecutiveCalls(false, true);
+
+        $connection->expects($this->once())
+            ->method('rollBack');
+
+        $this->assertSame([['value' => 1]], $this->executor->execute($connection, 'SELECT 1'));
+    }
+
+    public function testRetriesAfterSqlState08ConnectionFailure(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $result = $this->createStub(Result::class);
+        $attempt = 0;
+        $result->method('fetchAllAssociative')->willReturn([['value' => 1]]);
+
+        $connection->expects($this->exactly(2))
+            ->method('beginTransaction')
+            ->willReturnCallback(static function () use (&$attempt): void {
+                ++$attempt;
+                if (1 === $attempt) {
+                    throw new ConnectionException(new PdoException('Connection failed', '08006'), null);
+                }
+            });
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $connection->expects($this->once())
+            ->method('executeQuery')
+            ->willReturn($result);
+
+        $connection->expects($this->exactly(2))
+            ->method('isTransactionActive')
+            ->willReturnOnConsecutiveCalls(false, true);
+
+        $connection->expects($this->once())
+            ->method('rollBack');
+
+        $this->assertSame([['value' => 1]], $this->executor->execute($connection, 'SELECT 1'));
+    }
+
+    public function testClassifiesSqlState08AndCaseInsensitiveMessagesAsStale(): void
+    {
+        $this->assertTrue(StaleConnectionRetryer::isStaleConnection(new PdoException('Connection failed', '08006')));
+        $this->assertTrue(StaleConnectionRetryer::isStaleConnection(new \RuntimeException('SERVER HAS GONE AWAY')));
+    }
+
+    public function testDoesNotRetryMoreThanOnce(): void
+    {
+        $connection = $this->createMock(Connection::class);
+
+        $connection->expects($this->exactly(2))
+            ->method('beginTransaction')
+            ->willThrowException(new \RuntimeException('server has gone away'));
+
+        $connection->expects($this->once())
+            ->method('close');
+
+        $connection->expects($this->exactly(2))
+            ->method('isTransactionActive')
+            ->willReturn(false);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('server has gone away');
+
+        $this->executor->execute($connection, 'SELECT 1');
+    }
+
+    public function testPreservesQueryExceptionWhenRollbackFails(): void
+    {
+        $connection = $this->createMock(Connection::class);
+
+        $connection->expects($this->once())
+            ->method('beginTransaction');
+
+        $connection->expects($this->once())
+            ->method('executeQuery')
+            ->willThrowException(new \RuntimeException('Query error'));
+
+        $connection->expects($this->once())
+            ->method('isTransactionActive')
+            ->willReturn(true);
+
+        $connection->expects($this->once())
+            ->method('rollBack')
+            ->willThrowException(new \RuntimeException('Rollback error'));
+
+        $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Query error');
 
         $this->executor->execute($connection, 'SELECT 1');
