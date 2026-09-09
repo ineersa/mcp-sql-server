@@ -129,9 +129,11 @@ Add this to your MCP client's configuration (e.g., `mcp.json` or Claude Desktop 
 ### Docker Compose launch configuration
 
 Use this invocation for MCP over stdio on macOS or Linux. Replace
-`/path/to/docker-compose.yaml` with your Compose file's absolute path. Run
-`command -v docker` in your terminal and replace `/usr/local/bin/docker` with the
-returned absolute path. GUI clients might not inherit your terminal's `PATH`.
+`/path/to/docker-compose.yaml` with your Compose file's absolute path.
+
+Use `docker` if it is available on your MCP client's `PATH`. Otherwise, run
+`command -v docker` in your terminal and use the returned absolute path instead.
+GUI clients might not inherit your terminal's `PATH`.
 
 The example passes environment variables through `/usr/bin/env`, so it does not
 require your MCP client to support an `env` block. Place the `database` entry under
@@ -147,7 +149,7 @@ your client's server configuration key, such as `mcpServers` in Claude Desktop.
             "COMPOSE_ANSI=never",
             "COMPOSE_IGNORE_ORPHANS=true",
             "DOCKER_CLI_HINTS=false",
-            "/usr/local/bin/docker",
+            "docker",
             "compose",
             "-f",
             "/path/to/docker-compose.yaml",
@@ -183,7 +185,7 @@ you connect the MCP client. Do not redirect stderr to stdout for this invocation
 ### OpenCode
 
 Use the same environment settings and Compose options in OpenCode's command array.
-Replace both absolute paths as described above.
+Replace the Compose file path and, if needed, the Docker command as described above.
 
 ```json
 {
@@ -197,7 +199,7 @@ Replace both absolute paths as described above.
                 "COMPOSE_ANSI=never",
                 "COMPOSE_IGNORE_ORPHANS=true",
                 "DOCKER_CLI_HINTS=false",
-                "/usr/local/bin/docker",
+                "docker",
                 "compose",
                 "-f",
                 "/path/to/docker-compose.yaml",
