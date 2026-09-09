@@ -361,17 +361,31 @@ If `matchMode` is `exact`, `filter` is non-empty, and no object matches, the res
 
 This server includes built-in PII (Personally Identifiable Information) detection and redaction using GLiNER models in ONNX format via the native [gliner-rs-php](https://github.com/ineersa/gliner-rs-php) extension.
 
-### 1. Download Models
+### 1. Set up models
 
-The server supports any GLiNER model in ONNX format. While any compatible model can be used, we recommend and provide a helper for our tested [GLiNER PII ONNX](https://huggingface.co/ineersa/gliner-PII-onnx) model (~1.8GB).
+Docker images include the [GLiNER PII ONNX model](https://huggingface.co/ineersa/gliner-PII-onnx)
+and tokenizer at `/app/models`. PII detection needs no model download or Hugging
+Face access at runtime. The bundled files add about 1.8 GB before image compression.
 
-**Using Docker (Recommended):**
+When upgrading an existing Docker setup, remove the `./models:/app/models:ro`
+volume mount and the `download-models` service from your Compose file. The old
+mount hides the bundled files, even if the host directory is empty.
+
+To use a custom compatible GLiNER ONNX model, mount its directory and set
+`pii.tokenizer_path` and `pii.model_path` to the container paths.
+
+The image build downloads a pinned model revision and verifies SHA-256 checksums.
+Building the image requires Hugging Face access. The model is distributed under
+the [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/),
+with the agreement and attribution in `/app/models/LICENSE.html` and `/app/models/Notice.txt`.
+
+To verify bundled model inference without network access after building an image:
 
 ```bash
-docker compose run --rm download-models
+docker run --rm --network none -i --entrypoint php ineersa/database-mcp:latest < tests/docker-model-smoke.php
 ```
 
-**Using PHP:**
+For a native PHP installation, download the files before enabling PII detection:
 
 ```bash
 php bin/console download-models
