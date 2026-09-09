@@ -1,0 +1,7 @@
+Licensed by NVIDIA Corporation under the NVIDIA Open Model License
+
+Model: ineersa/gliner-PII-onnx, ONNX conversion of nvidia/gliner-PII.
+Revision: d37e591387db792742defc2a70cd31e0fbea5f78
+Source: https://huggingface.co/ineersa/gliner-PII-onnx
+License: https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/
+The accompanying LICENSE.html contains the NVIDIA agreement.

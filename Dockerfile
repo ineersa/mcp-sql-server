@@ -2,6 +2,18 @@
 # Supports: MySQL, PostgreSQL, SQLite, SQL Server
 # Includes GLiNER PHP extension for PII detection
 
+FROM debian:bookworm-slim AS pii-models
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /models
+RUN curl --fail --location --retry 3 -o model.onnx \
+        https://huggingface.co/ineersa/gliner-PII-onnx/resolve/d37e591387db792742defc2a70cd31e0fbea5f78/model.onnx \
+    && curl --fail --location --retry 3 -o tokenizer.json \
+        https://huggingface.co/ineersa/gliner-PII-onnx/resolve/d37e591387db792742defc2a70cd31e0fbea5f78/tokenizer.json \
+    && printf '%s\n' \
+        'c5bf573d0a452c5037af587262912d283704894023e617cc5f9684abff54750d  model.onnx' \
+        '953deb290bdcbd985bb91223801eeb4bea79021f0d2e24ebb764dcd2b0816cf9  tokenizer.json' | sha256sum --check
+
 FROM php:8.4-cli-bookworm
 
 LABEL maintainer="Illia Vasylevskyi <ineersa@gmail.com>"
@@ -94,14 +106,14 @@ ENV APP_ENV=prod
 # Install dependencies without dev packages
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
+COPY --from=pii-models /models /app/models
+COPY licenses/models/ /app/models/
+
 # Copy application source (uses .dockerignore to exclude unwanted files)
 COPY . ./
 
 # Generate optimized autoloader
 RUN composer dump-autoload --optimize --classmap-authoritative
-
-# Note: For PII detection, mount GLiNER models via docker-compose volume:
-# - ./models:/app/models:ro
 
 # Create log directory
 RUN mkdir -p /tmp/database-mcp/log

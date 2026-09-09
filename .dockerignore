@@ -25,6 +25,7 @@ phpunit.dist.xml
 .phpunit.cache/
 
 # Build artifacts
+models/
 coverage/
 dist/
 var/
